@@ -150,15 +150,42 @@ class WebStepEditor(StepEditor):
         self.params_widget.setLayout(self.params_layout)
         layout.addRow(self.params_widget)
         
+        # Initialize step data
+        self.step = {}
+        
     def _update_ui(self):
         """Update the UI with the current step data."""
         action = self.current_step.get("action", "navigate")
         self.action_combo.setCurrentText(action)
         self._update_params_ui()
+    
+    def set_step_data(self, step: Dict[str, Any]) -> None:
+        """
+        Set the step data to be edited.
+        
+        Args:
+            step: The step data
+        """
+        self.step = step
+        self.current_step = step  # For backward compatibility
+        # Call _update_ui instead of _update_ui_from_step to be compatible with both implementations
+        self._update_ui()
+    
+    def _update_ui_from_step(self) -> None:
+        """Update the UI with the current step data."""
+        action = self.step.get("action", "navigate")
+        self.action_combo.setCurrentText(action)
+        self._update_params_ui()
+        
+    def _update_step_from_ui(self) -> None:
+        """Update the step data from the UI and emit the step_changed signal."""
+        self.step["action"] = self.action_combo.currentText()
+        self._emit_step_changed()
         
     def _on_action_changed(self, action):
         """Handle action type changes."""
         self.current_step["action"] = action
+        self.step["action"] = action
         self._update_params_ui()
         self._emit_step_changed()
         
