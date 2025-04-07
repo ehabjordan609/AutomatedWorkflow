@@ -1,0 +1,52 @@
+modules = ["python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Automation Tool"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "automation_tool_workflow"
+
+[[workflows.workflow]]
+name = "Automation Tool"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install PyQt5 pyautogui pynput selenium opencv-python pytesseract numpy Pillow && python main.py"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "automation_tool_workflow"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
+
+[deployment]
+run = ["sh", "-c", "pip install PyQt5 pyautogui pynput selenium opencv-python pytesseract numpy Pillow && python main.py"]
