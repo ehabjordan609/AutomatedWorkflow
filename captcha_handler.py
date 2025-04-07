@@ -8,9 +8,11 @@ import time
 import logging
 import tempfile
 from typing import Dict, Any, Optional
-import cv2
-import numpy as np
-import pytesseract
+
+# Import these conditionally within functions to avoid errors if not installed
+# import cv2
+# import numpy as np
+# import pytesseract
 from PIL import Image
 
 logger = logging.getLogger(__name__)

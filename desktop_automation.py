@@ -8,8 +8,11 @@ import logging
 import tempfile
 from typing import Dict, Any, Tuple, Optional, List
 import pyautogui
-import cv2
-import numpy as np
+
+# Import these conditionally within functions to avoid errors if not installed
+# import cv2
+# import numpy as np
+# import pyperclip
 
 # Setup PyAutoGUI to be safer
 pyautogui.FAILSAFE = True  # Move mouse to top-left corner to abort
@@ -83,6 +86,43 @@ class DesktopAutomation:
                 
             elif action == 'screenshot':
                 return self._take_screenshot(params)
+            
+            # New actions for common keyboard shortcuts
+            elif action == 'select_all':
+                return self._perform_key_press({'key': 'select_all'})
+                
+            elif action == 'copy':
+                return self._perform_key_press({'key': 'copy'})
+                
+            elif action == 'paste':
+                return self._perform_key_press({'key': 'paste'})
+                
+            elif action == 'cut':
+                return self._perform_key_press({'key': 'cut'})
+                
+            elif action == 'new_tab':
+                return self._perform_key_press({'key': 'new_tab'})
+                
+            elif action == 'close_tab':
+                return self._perform_key_press({'key': 'close_tab'})
+                
+            elif action == 'switch_tab':
+                tab_number = params.get('tab_number', 1)
+                return self._perform_key_press({'key': 'switch_tab', 'tab_number': tab_number})
+                
+            # New file operations
+            elif action == 'read_from_file':
+                return self._read_from_file(params)
+                
+            elif action == 'write_to_file':
+                return self._write_to_file(params)
+                
+            elif action == 'append_to_file':
+                return self._append_to_file(params)
+                
+            # Clipboard monitoring
+            elif action == 'wait_for_clipboard':
+                return self._wait_for_clipboard(params)
                 
             else:
                 logger.error(f"Unknown desktop action: {action}")
@@ -192,16 +232,53 @@ class DesktopAutomation:
                 logger.warning("No key specified for key press")
                 return False
             
+            # Handle predefined actions
+            if key == 'select_all':
+                logger.info("Selecting all text (Ctrl+A)")
+                pyautogui.hotkey('ctrl', 'a')
+                return True
+            elif key == 'copy':
+                logger.info("Copying selected text (Ctrl+C)")
+                pyautogui.hotkey('ctrl', 'c')
+                return True
+            elif key == 'paste':
+                logger.info("Pasting text (Ctrl+V)")
+                pyautogui.hotkey('ctrl', 'v')
+                return True
+            elif key == 'cut':
+                logger.info("Cutting selected text (Ctrl+X)")
+                pyautogui.hotkey('ctrl', 'x')
+                return True
+            elif key == 'new_tab':
+                logger.info("Opening new tab (Ctrl+T)")
+                pyautogui.hotkey('ctrl', 't')
+                return True
+            elif key == 'close_tab':
+                logger.info("Closing current tab (Ctrl+W)")
+                pyautogui.hotkey('ctrl', 'w')
+                return True
+            elif key == 'switch_tab':
+                # Tab number can be provided in the "tab_number" parameter
+                tab_number = params.get('tab_number', 1)
+                if 1 <= tab_number <= 8:
+                    logger.info(f"Switching to tab {tab_number} (Ctrl+{tab_number})")
+                    pyautogui.hotkey('ctrl', str(tab_number))
+                    return True
+                else:
+                    logger.warning(f"Invalid tab number: {tab_number}")
+                    return False
+            
             # Handle key combinations (e.g., 'ctrl+c')
-            if '+' in key:
+            elif '+' in key:
                 keys = key.split('+')
                 logger.info(f"Pressing key combination: {key}")
                 pyautogui.hotkey(*keys)
+                return True
             else:
                 logger.info(f"Pressing key: {key}")
                 pyautogui.press(key)
+                return True
                 
-            return True
         except Exception as e:
             logger.error(f"Key press error: {str(e)}")
             return False
@@ -285,14 +362,50 @@ class DesktopAutomation:
                     return None
             
             logger.info(f"Looking for image: {image_path} (confidence: {confidence})")
-            location = pyautogui.locateCenterOnScreen(image_path, confidence=confidence)
-            
-            if location:
-                logger.info(f"Image found at: {location}")
-                return location
-            else:
-                logger.info(f"Image not found: {image_path}")
-                return None
+            # Use OpenCV for more advanced image recognition if available
+            try:
+                import cv2
+                import numpy as np
+                
+                # Take a screenshot
+                screen = pyautogui.screenshot()
+                screen_np = np.array(screen)
+                screen_gray = cv2.cvtColor(screen_np, cv2.COLOR_RGB2BGR)
+                
+                # Load the template image
+                template = cv2.imread(image_path)
+                if template is None:
+                    logger.error(f"Failed to load image: {image_path}")
+                    return None
+                
+                # Perform template matching
+                result = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                
+                # If the match is good enough
+                if max_val >= confidence:
+                    # Get the center of the matched region
+                    template_h, template_w = template.shape[:2]
+                    center_x = max_loc[0] + template_w // 2
+                    center_y = max_loc[1] + template_h // 2
+                    
+                    logger.info(f"Image found at: ({center_x}, {center_y}) with confidence {max_val:.2f}")
+                    return (center_x, center_y)
+                else:
+                    logger.info(f"Image not found (best match: {max_val:.2f})")
+                    return None
+                    
+            except ImportError:
+                # Fall back to pyautogui's locateCenterOnScreen if OpenCV is not available
+                logger.info("OpenCV not available, falling back to PyAutoGUI")
+                location = pyautogui.locateCenterOnScreen(image_path, grayscale=True, confidence=float(confidence))
+                
+                if location:
+                    logger.info(f"Image found at: {location}")
+                    return location
+                else:
+                    logger.info(f"Image not found: {image_path}")
+                    return None
                 
         except Exception as e:
             logger.error(f"Image search error: {str(e)}")
@@ -404,4 +517,129 @@ class DesktopAutomation:
             return True
         except Exception as e:
             logger.error(f"Screenshot error: {str(e)}")
+            return False
+            
+    def _read_from_file(self, params: Dict[str, Any]) -> bool:
+        """Read content from a file and store it in a variable."""
+        try:
+            file_path = params.get('file_path', '')
+            if not file_path:
+                logger.error("No file path provided")
+                return False
+                
+            encoding = params.get('encoding', 'utf-8')
+            variable_name = params.get('variable', '')
+            
+            if not os.path.exists(file_path):
+                logger.error(f"File not found: {file_path}")
+                return False
+                
+            logger.info(f"Reading from file: {file_path}")
+            
+            with open(file_path, 'r', encoding=encoding) as file:
+                content = file.read()
+                
+            if variable_name:
+                params['result'] = content
+                logger.info(f"Stored file content in variable: {len(content)} characters")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"File read error: {str(e)}")
+            return False
+            
+    def _write_to_file(self, params: Dict[str, Any]) -> bool:
+        """Write content to a file."""
+        try:
+            file_path = params.get('file_path', '')
+            content = params.get('content', '')
+            
+            if not file_path:
+                logger.error("No file path provided")
+                return False
+                
+            encoding = params.get('encoding', 'utf-8')
+            
+            logger.info(f"Writing to file: {file_path}")
+            
+            # Create directory if it doesn't exist
+            directory = os.path.dirname(file_path)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory)
+                
+            with open(file_path, 'w', encoding=encoding) as file:
+                file.write(content)
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"File write error: {str(e)}")
+            return False
+            
+    def _append_to_file(self, params: Dict[str, Any]) -> bool:
+        """Append content to a file."""
+        try:
+            file_path = params.get('file_path', '')
+            content = params.get('content', '')
+            
+            if not file_path:
+                logger.error("No file path provided")
+                return False
+                
+            encoding = params.get('encoding', 'utf-8')
+            
+            logger.info(f"Appending to file: {file_path}")
+            
+            # Create directory if it doesn't exist
+            directory = os.path.dirname(file_path)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory)
+                
+            with open(file_path, 'a', encoding=encoding) as file:
+                file.write(content)
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"File append error: {str(e)}")
+            return False
+            
+    def _wait_for_clipboard(self, params: Dict[str, Any]) -> bool:
+        """Wait for clipboard content to change and store it in a variable."""
+        try:
+            try:
+                import pyperclip
+            except ImportError:
+                logger.error("pyperclip module not available. Install with 'pip install pyperclip'")
+                return False
+                
+            initial_content = pyperclip.paste()
+            timeout = params.get('timeout', 30)  # Timeout in seconds
+            interval = params.get('interval', 0.5)  # Check interval
+            variable_name = params.get('variable', '')
+            
+            logger.info(f"Waiting for clipboard content to change (timeout: {timeout}s)")
+            
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                current_content = pyperclip.paste()
+                
+                if current_content != initial_content:
+                    logger.info(f"Clipboard content changed after {time.time() - start_time:.1f} seconds")
+                    
+                    if variable_name:
+                        params['result'] = current_content
+                        logger.info(f"Stored clipboard content in variable: {len(current_content)} characters")
+                        
+                    return True
+                    
+                time.sleep(interval)
+                
+            # Timeout reached
+            logger.warning(f"Timeout waiting for clipboard to change")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Clipboard monitoring error: {str(e)}")
             return False

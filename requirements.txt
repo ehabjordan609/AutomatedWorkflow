@@ -1,7 +1,8 @@
-
-numpy
-opencv-python
-pyautogui
-pytesseract
-selenium
-trafilatura
+pyautogui==0.9.54
+numpy==2.2.4
+opencv-python==4.11.0.86
+pyautogui==0.9.54
+pytesseract==0.3.13
+selenium==4.31.0
+trafilatura==2.0.0
+pyperclip==1.9.0
