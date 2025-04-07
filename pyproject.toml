@@ -3,4 +3,10 @@ name = "repl-nix-workspace"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "numpy>=2.2.4",
+    "opencv-python>=4.11.0.86",
+    "pyautogui>=0.9.54",
+    "pytesseract>=0.3.13",
+    "selenium>=4.31.0",
+]
