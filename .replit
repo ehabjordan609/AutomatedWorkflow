@@ -19,6 +19,10 @@ args = "Automation Tool"
 task = "workflow.run"
 args = "automation_tool_workflow"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Console UI"
+
 [[workflows.workflow]]
 name = "Automation Tool"
 author = "agent"
@@ -47,6 +51,20 @@ task = "packager.installForAll"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python main.py"
+
+[[workflows.workflow]]
+name = "Console UI"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python simple_app.py"
 
 [deployment]
 run = ["sh", "-c", "pip install PyQt5 pyautogui pynput selenium opencv-python pytesseract numpy Pillow && python main.py"]

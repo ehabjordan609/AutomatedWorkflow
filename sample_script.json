@@ -1,0 +1,73 @@
+{
+  "name": "Website Login Example",
+  "description": "Automates logging into a website",
+  "created": 1713566423.5959985,
+  "modified": 1713566423.5959985,
+  "steps": [
+    {
+      "type": "web",
+      "action": "start_browser",
+      "browser": "chrome",
+      "headless": false,
+      "delay": 0.5,
+      "description": "Start Chrome browser"
+    },
+    {
+      "type": "web",
+      "action": "navigate",
+      "url": "https://example.com/login",
+      "delay": 1.0,
+      "description": "Navigate to login page"
+    },
+    {
+      "type": "web",
+      "action": "type",
+      "selector": {
+        "type": "id",
+        "value": "username"
+      },
+      "text": "myusername",
+      "delay": 0.5,
+      "description": "Enter username"
+    },
+    {
+      "type": "web",
+      "action": "type",
+      "selector": {
+        "type": "id",
+        "value": "password"
+      },
+      "text": "mypassword",
+      "delay": 0.5,
+      "description": "Enter password"
+    },
+    {
+      "type": "web",
+      "action": "click",
+      "selector": {
+        "type": "xpath",
+        "value": "//button[@type='submit']"
+      },
+      "delay": 1.0,
+      "description": "Click login button"
+    },
+    {
+      "type": "wait",
+      "duration": 3,
+      "delay": 0.5,
+      "description": "Wait for page to load"
+    },
+    {
+      "type": "web",
+      "action": "wait",
+      "selector": {
+        "type": "css",
+        "value": ".dashboard"
+      },
+      "condition": "visible",
+      "timeout": 10,
+      "delay": 0.5,
+      "description": "Verify we're on the dashboard"
+    }
+  ]
+}

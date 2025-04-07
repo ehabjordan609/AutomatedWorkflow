@@ -1,0 +1,53 @@
+{
+  "name": "Desktop Actions Example",
+  "description": "Demonstrates various desktop actions",
+  "created": 1713567423.5959985,
+  "modified": 1713567423.5959985,
+  "steps": [
+    {
+      "type": "desktop",
+      "action": "move",
+      "x": 500,
+      "y": 300,
+      "duration": 0.5,
+      "delay": 0.5,
+      "description": "Move cursor to center"
+    },
+    {
+      "type": "desktop",
+      "action": "click",
+      "x": 500,
+      "y": 300,
+      "delay": 0.5,
+      "description": "Click at center"
+    },
+    {
+      "type": "desktop", 
+      "action": "type",
+      "text": "Hello, Automation Tool!",
+      "interval": 0.05,
+      "delay": 0.5,
+      "description": "Type text"
+    },
+    {
+      "type": "desktop",
+      "action": "key_press",
+      "key": "enter",
+      "delay": 0.5,
+      "description": "Press Enter key"
+    },
+    {
+      "type": "wait",
+      "duration": 2,
+      "delay": 0.5,
+      "description": "Wait for 2 seconds"
+    },
+    {
+      "type": "desktop",
+      "action": "scroll",
+      "clicks": -5,
+      "delay": 0.5,
+      "description": "Scroll down"
+    }
+  ]
+}
