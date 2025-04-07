@@ -1,20 +1,71 @@
 """
 Recorder widget for capturing user actions and creating automation scripts.
+This is a simplified version that runs in both GUI and headless environments.
 """
 import logging
 import time
 import threading
 from typing import Dict, List, Any, Optional, Tuple
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QComboBox, QLineEdit, QFormLayout, QGroupBox, QCheckBox,
-    QSpinBox, QMessageBox, QHeaderView
-)
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
-from PyQt5.QtGui import QIcon, QFont, QColor
 
-import pyautogui
-from pynput import mouse, keyboard
+# Import conditionally to handle environments without PyQt5
+try:
+    from PyQt5.QtWidgets import (
+        QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
+        QTableWidgetItem, QComboBox, QLineEdit, QFormLayout, QGroupBox, QCheckBox,
+        QSpinBox, QMessageBox, QHeaderView
+    )
+    from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
+    from PyQt5.QtGui import QIcon, QFont, QColor
+    USE_QT = True
+except ImportError:
+    USE_QT = False
+    # Create mock types for type checking
+    class QWidget: pass
+    class pyqtSignal: 
+        def __init__(self, *args): pass
+        def emit(self, *args): pass
+
+# Import conditionally to handle environments without pyautogui
+try:
+    import pyautogui
+    USE_PYAUTOGUI = True
+except ImportError:
+    USE_PYAUTOGUI = False
+
+# Mock mouse and keyboard classes for environments without pynput
+class MockMouse:
+    class Button:
+        left = "left"
+        right = "right"
+    
+    class Listener:
+        def __init__(self, on_click=None, on_scroll=None):
+            self.on_click = on_click
+            self.on_scroll = on_scroll
+        
+        def start(self):
+            pass
+        
+        def stop(self):
+            pass
+
+class MockKeyboard:
+    class Listener:
+        def __init__(self, on_press=None):
+            self.on_press = on_press
+        
+        def start(self):
+            pass
+        
+        def stop(self):
+            pass
+
+# Use mock objects if pynput is not available
+try:
+    from pynput import mouse, keyboard
+except ImportError:
+    mouse = MockMouse()
+    keyboard = MockKeyboard()
 
 from script_manager import ScriptManager
 
@@ -25,10 +76,11 @@ class RecorderWidget(QWidget):
     Widget for recording user actions and creating automation scripts.
     """
     
-    def __init__(self, script_manager: ScriptManager, parent=None):
+    def __init__(self, script_manager: ScriptManager, automation_engine=None, parent=None):
         """Initialize the recorder widget."""
         super().__init__(parent)
         self.script_manager = script_manager
+        self.automation_engine = automation_engine
         
         # Recording state
         self.is_recording = False
