@@ -1,19 +1,21 @@
+#!/usr/bin/env python3
 """
 Desktop automation module handling mouse, keyboard, and screen interactions.
 """
-import logging
+import os
 import time
-from typing import Dict, Any, Tuple, Optional
+import logging
+import tempfile
+from typing import Dict, Any, Tuple, Optional, List
 import pyautogui
 import cv2
 import numpy as np
-from PIL import Image
+
+# Setup PyAutoGUI to be safer
+pyautogui.FAILSAFE = True  # Move mouse to top-left corner to abort
+pyautogui.PAUSE = 0.1  # Add small pause between PyAutoGUI actions
 
 logger = logging.getLogger(__name__)
-
-# Configure PyAutoGUI to be safer
-pyautogui.PAUSE = 0.1  # Add slight delay between actions
-pyautogui.FAILSAFE = True  # Move mouse to corner to abort
 
 class DesktopAutomation:
     """
@@ -22,8 +24,19 @@ class DesktopAutomation:
     
     def __init__(self):
         """Initialize the desktop automation module."""
+        self.screenshots_dir = "screenshots"
+        self.images_dir = "images"
+        
+        # Create directories if they don't exist
+        for directory in [self.screenshots_dir, self.images_dir]:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+        
+        # Get screen dimensions
         self.screen_width, self.screen_height = pyautogui.size()
-        logger.info(f"Desktop resolution: {self.screen_width}x{self.screen_height}")
+        logger.info(f"Screen dimensions: {self.screen_width}x{self.screen_height}")
+        
+        logger.info("DesktopAutomation initialized")
     
     def execute_action(self, action: str, params: Dict[str, Any]) -> bool:
         """
@@ -37,31 +50,46 @@ class DesktopAutomation:
             bool: True if action executed successfully, False otherwise
         """
         try:
+            # Map actions to methods
             if action == 'click':
                 return self._perform_click(params)
+                
             elif action == 'right_click':
                 return self._perform_right_click(params)
+                
             elif action == 'double_click':
                 return self._perform_double_click(params)
+                
             elif action == 'type':
                 return self._perform_type(params)
+                
             elif action == 'key_press':
                 return self._perform_key_press(params)
+                
             elif action == 'move':
                 return self._perform_move(params)
+                
             elif action == 'drag':
                 return self._perform_drag(params)
+                
             elif action == 'scroll':
                 return self._perform_scroll(params)
+                
             elif action == 'find_image':
                 return self._find_image(params)
+                
             elif action == 'wait_for_image':
                 return self._wait_for_image(params)
+                
+            elif action == 'screenshot':
+                return self._take_screenshot(params)
+                
             else:
                 logger.error(f"Unknown desktop action: {action}")
                 return False
+                
         except Exception as e:
-            logger.error(f"Desktop action '{action}' failed: {str(e)}")
+            logger.error(f"Error executing desktop action '{action}': {str(e)}")
             return False
     
     def _get_coordinates(self, params: Dict[str, Any]) -> Tuple[int, int]:
@@ -76,111 +104,166 @@ class DesktopAutomation:
         """
         if 'image' in params:
             # Find coordinates by image recognition
-            location = self._find_on_screen(params['image'], params.get('confidence', 0.9))
-            if location:
-                return location
+            image_path = params['image']
+            confidence = params.get('confidence', 0.9)
+            
+            coords = self._find_on_screen(image_path, confidence)
+            if coords:
+                return coords
             else:
-                raise ValueError(f"Image not found on screen: {params['image']}")
-        elif 'x' in params and 'y' in params:
-            # Use direct coordinates
-            return params['x'], params['y']
+                logger.error(f"Image not found on screen: {image_path}")
+                raise ValueError(f"Image not found: {image_path}")
         else:
-            raise ValueError("No valid coordinates specified in parameters")
+            # Get coordinates directly from parameters
+            x = params.get('x', 0)
+            y = params.get('y', 0)
+            
+            # Validate coordinates are within screen bounds
+            if 0 <= x <= self.screen_width and 0 <= y <= self.screen_height:
+                return (x, y)
+            else:
+                logger.error(f"Coordinates ({x}, {y}) out of screen bounds ({self.screen_width}x{self.screen_height})")
+                raise ValueError(f"Coordinates out of bounds: ({x}, {y})")
     
     def _perform_click(self, params: Dict[str, Any]) -> bool:
         """Perform a mouse click action."""
-        x, y = self._get_coordinates(params)
-        pyautogui.click(x, y)
-        logger.info(f"Clicked at ({x}, {y})")
-        return True
+        try:
+            x, y = self._get_coordinates(params)
+            duration = params.get('duration', 0.1)  # Movement duration
+            
+            logger.info(f"Clicking at ({x}, {y})")
+            pyautogui.moveTo(x, y, duration=duration)
+            pyautogui.click(x, y)
+            return True
+        except Exception as e:
+            logger.error(f"Click error: {str(e)}")
+            return False
     
     def _perform_right_click(self, params: Dict[str, Any]) -> bool:
         """Perform a right mouse click action."""
-        x, y = self._get_coordinates(params)
-        pyautogui.rightClick(x, y)
-        logger.info(f"Right-clicked at ({x}, {y})")
-        return True
+        try:
+            x, y = self._get_coordinates(params)
+            duration = params.get('duration', 0.1)  # Movement duration
+            
+            logger.info(f"Right-clicking at ({x}, {y})")
+            pyautogui.moveTo(x, y, duration=duration)
+            pyautogui.rightClick(x, y)
+            return True
+        except Exception as e:
+            logger.error(f"Right-click error: {str(e)}")
+            return False
     
     def _perform_double_click(self, params: Dict[str, Any]) -> bool:
         """Perform a double mouse click action."""
-        x, y = self._get_coordinates(params)
-        pyautogui.doubleClick(x, y)
-        logger.info(f"Double-clicked at ({x}, {y})")
-        return True
+        try:
+            x, y = self._get_coordinates(params)
+            duration = params.get('duration', 0.1)  # Movement duration
+            
+            logger.info(f"Double-clicking at ({x}, {y})")
+            pyautogui.moveTo(x, y, duration=duration)
+            pyautogui.doubleClick(x, y)
+            return True
+        except Exception as e:
+            logger.error(f"Double-click error: {str(e)}")
+            return False
     
     def _perform_type(self, params: Dict[str, Any]) -> bool:
         """Type text at the current cursor position."""
-        text = params.get('text', '')
-        if not text:
-            logger.warning("Empty text provided for typing action")
+        try:
+            text = params.get('text', '')
+            if not text:
+                logger.warning("No text provided for typing")
+                return False
+            
+            interval = params.get('interval', 0.0)  # Time between keypresses
+            
+            logger.info(f"Typing text: '{text}'")
+            pyautogui.typewrite(text, interval=interval)
+            return True
+        except Exception as e:
+            logger.error(f"Type error: {str(e)}")
             return False
-        
-        interval = params.get('interval', 0.01)  # Time between keypresses
-        pyautogui.write(text, interval=interval)
-        logger.info(f"Typed text: {text}")
-        return True
     
     def _perform_key_press(self, params: Dict[str, Any]) -> bool:
         """Press a keyboard key or key combination."""
-        key = params.get('key', '')
-        if not key:
-            logger.warning("No key specified for key press action")
-            return False
-        
-        # Handle key combinations
-        if '+' in key:
-            # Split by '+' and press keys together
-            keys = [k.strip() for k in key.split('+')]
-            pyautogui.hotkey(*keys)
-            logger.info(f"Pressed key combination: {key}")
-        else:
-            # Press a single key
-            pyautogui.press(key)
-            logger.info(f"Pressed key: {key}")
+        try:
+            key = params.get('key', '')
+            if not key:
+                logger.warning("No key specified for key press")
+                return False
             
-        return True
+            # Handle key combinations (e.g., 'ctrl+c')
+            if '+' in key:
+                keys = key.split('+')
+                logger.info(f"Pressing key combination: {key}")
+                pyautogui.hotkey(*keys)
+            else:
+                logger.info(f"Pressing key: {key}")
+                pyautogui.press(key)
+                
+            return True
+        except Exception as e:
+            logger.error(f"Key press error: {str(e)}")
+            return False
     
     def _perform_move(self, params: Dict[str, Any]) -> bool:
         """Move mouse cursor to specified position."""
-        x, y = self._get_coordinates(params)
-        duration = params.get('duration', 0.5)  # Movement duration
-        pyautogui.moveTo(x, y, duration=duration)
-        logger.info(f"Moved cursor to ({x}, {y})")
-        return True
+        try:
+            x, y = self._get_coordinates(params)
+            duration = params.get('duration', 0.5)  # Movement duration
+            
+            logger.info(f"Moving cursor to ({x}, {y})")
+            pyautogui.moveTo(x, y, duration=duration)
+            return True
+        except Exception as e:
+            logger.error(f"Move error: {str(e)}")
+            return False
     
     def _perform_drag(self, params: Dict[str, Any]) -> bool:
         """Drag from current position to target position."""
-        # Get start position
-        start_x, start_y = self._get_coordinates(params)
-        
-        # Move to start position
-        pyautogui.moveTo(start_x, start_y, duration=0.2)
-        
-        # Get end position
-        end_params = params.get('to', {})
-        if not end_params:
-            logger.error("No target position specified for drag action")
-            return False
+        try:
+            # Get start coordinates
+            start_x, start_y = self._get_coordinates(params)
             
-        end_x, end_y = self._get_coordinates(end_params)
-        
-        # Perform drag
-        duration = params.get('duration', 0.5)
-        pyautogui.dragTo(end_x, end_y, duration=duration, button='left')
-        logger.info(f"Dragged from ({start_x}, {start_y}) to ({end_x}, {end_y})")
-        return True
+            # Get end coordinates
+            to_params = params.get('to', {})
+            if 'image' in to_params:
+                end_x, end_y = self._get_coordinates(to_params)
+            else:
+                end_x = to_params.get('x', 0)
+                end_y = to_params.get('y', 0)
+            
+            duration = params.get('duration', 0.5)  # Drag duration
+            
+            logger.info(f"Dragging from ({start_x}, {start_y}) to ({end_x}, {end_y})")
+            pyautogui.moveTo(start_x, start_y, duration=duration/2)
+            pyautogui.dragTo(end_x, end_y, duration=duration)
+            return True
+        except Exception as e:
+            logger.error(f"Drag error: {str(e)}")
+            return False
     
     def _perform_scroll(self, params: Dict[str, Any]) -> bool:
         """Scroll the mouse wheel by specified amount."""
-        clicks = params.get('clicks', 0)
-        if clicks == 0:
-            logger.warning("Scroll amount (clicks) not specified")
-            return False
+        try:
+            clicks = params.get('clicks', 0)
+            if clicks == 0:
+                logger.warning("Scroll amount (clicks) is zero")
+                return True
             
-        pyautogui.scroll(clicks)
-        direction = "down" if clicks < 0 else "up"
-        logger.info(f"Scrolled {direction} by {abs(clicks)} clicks")
-        return True
+            x = params.get('x', None)
+            y = params.get('y', None)
+            
+            # Move to position first if coordinates provided
+            if x is not None and y is not None:
+                pyautogui.moveTo(x, y, duration=0.1)
+            
+            logger.info(f"Scrolling by {clicks} clicks")
+            pyautogui.scroll(clicks)
+            return True
+        except Exception as e:
+            logger.error(f"Scroll error: {str(e)}")
+            return False
     
     def _find_on_screen(self, image_path: str, confidence: float = 0.9) -> Optional[Tuple[int, int]]:
         """
@@ -194,46 +277,131 @@ class DesktopAutomation:
             tuple: (x, y) coordinates of the image center, or None if not found
         """
         try:
+            # Ensure the image path exists
+            if not os.path.exists(image_path):
+                image_path = os.path.join(self.images_dir, image_path)
+                if not os.path.exists(image_path):
+                    logger.error(f"Image file not found: {image_path}")
+                    return None
+            
+            logger.info(f"Looking for image: {image_path} (confidence: {confidence})")
             location = pyautogui.locateCenterOnScreen(image_path, confidence=confidence)
-            return location
+            
+            if location:
+                logger.info(f"Image found at: {location}")
+                return location
+            else:
+                logger.info(f"Image not found: {image_path}")
+                return None
+                
         except Exception as e:
-            logger.error(f"Error finding image on screen: {str(e)}")
+            logger.error(f"Image search error: {str(e)}")
             return None
     
     def _find_image(self, params: Dict[str, Any]) -> bool:
         """Find an image on the screen."""
-        image_path = params.get('image', '')
-        if not image_path:
-            logger.error("No image path specified for find_image action")
-            return False
+        try:
+            image_path = params.get('image', '')
+            if not image_path:
+                logger.error("No image path provided")
+                return False
             
-        confidence = params.get('confidence', 0.9)
-        location = self._find_on_screen(image_path, confidence)
-        
-        if location:
-            logger.info(f"Found image '{image_path}' at ({location[0]}, {location[1]})")
-            return True
-        else:
-            logger.warning(f"Image '{image_path}' not found on screen")
+            confidence = params.get('confidence', 0.9)
+            
+            # If variable name is provided, store result
+            variable_name = params.get('variable', '')
+            
+            location = self._find_on_screen(image_path, confidence)
+            if location:
+                # Store coordinates in variable if requested
+                if variable_name:
+                    x, y = location
+                    params['result'] = {'x': x, 'y': y, 'found': True}
+                return True
+            else:
+                if variable_name:
+                    params['result'] = {'found': False}
+                return False
+                
+        except Exception as e:
+            logger.error(f"Find image error: {str(e)}")
             return False
     
     def _wait_for_image(self, params: Dict[str, Any]) -> bool:
         """Wait for an image to appear on the screen."""
-        image_path = params.get('image', '')
-        if not image_path:
-            logger.error("No image path specified for wait_for_image action")
+        try:
+            image_path = params.get('image', '')
+            if not image_path:
+                logger.error("No image path provided")
+                return False
+            
+            confidence = params.get('confidence', 0.9)
+            timeout = params.get('timeout', 30)  # Timeout in seconds
+            interval = params.get('interval', 0.5)  # Check interval
+            
+            # If variable name is provided, prepare to store result
+            variable_name = params.get('variable', '')
+            
+            logger.info(f"Waiting for image to appear: {image_path} (timeout: {timeout}s)")
+            
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                location = self._find_on_screen(image_path, confidence)
+                if location:
+                    logger.info(f"Image appeared after {time.time() - start_time:.1f} seconds")
+                    
+                    # Store coordinates in variable if requested
+                    if variable_name:
+                        x, y = location
+                        params['result'] = {'x': x, 'y': y, 'found': True}
+                    return True
+                
+                time.sleep(interval)
+            
+            # Timeout reached
+            logger.warning(f"Timeout waiting for image: {image_path}")
+            if variable_name:
+                params['result'] = {'found': False}
             return False
             
-        timeout = params.get('timeout', 30)  # Default 30 second timeout
-        confidence = params.get('confidence', 0.9)
-        
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            location = self._find_on_screen(image_path, confidence)
-            if location:
-                logger.info(f"Found image '{image_path}' at ({location[0]}, {location[1]}) after {time.time() - start_time:.2f} seconds")
-                return True
-            time.sleep(0.5)
-        
-        logger.warning(f"Image '{image_path}' not found within {timeout} seconds")
-        return False
+        except Exception as e:
+            logger.error(f"Wait for image error: {str(e)}")
+            return False
+    
+    def _take_screenshot(self, params: Dict[str, Any]) -> bool:
+        """Take a screenshot of the screen or a region."""
+        try:
+            # Create filename with timestamp if not provided
+            filename = params.get('filename', '')
+            if not filename:
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                filename = f"screenshot_{timestamp}.png"
+            
+            # Ensure the filename has .png extension
+            if not filename.lower().endswith('.png'):
+                filename += '.png'
+            
+            # Combine with screenshots directory
+            filepath = os.path.join(self.screenshots_dir, filename)
+            
+            # Check if we're capturing a region
+            region = params.get('region', None)
+            if region:
+                x, y, width, height = region
+                logger.info(f"Taking screenshot of region ({x}, {y}, {width}, {height}): {filepath}")
+                screenshot = pyautogui.screenshot(region=(x, y, width, height))
+            else:
+                logger.info(f"Taking full screen screenshot: {filepath}")
+                screenshot = pyautogui.screenshot()
+            
+            screenshot.save(filepath)
+            
+            # Store the path in result if variable name is provided
+            variable_name = params.get('variable', '')
+            if variable_name:
+                params['result'] = filepath
+                
+            return True
+        except Exception as e:
+            logger.error(f"Screenshot error: {str(e)}")
+            return False

@@ -1,21 +1,17 @@
+#!/usr/bin/env python3
 """
 CAPTCHA handling module for various types of CAPTCHAs.
 """
-import logging
-import time
 import os
-import io
-import base64
-from typing import Dict, Any, Optional, Tuple
-from PIL import Image
-import pytesseract
+import re
+import time
+import logging
+import tempfile
+from typing import Dict, Any, Optional
 import cv2
 import numpy as np
-
-# Import Selenium components for web-based CAPTCHAs
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import pytesseract
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +22,20 @@ class CaptchaHandler:
     
     def __init__(self):
         """Initialize the CAPTCHA handler."""
-        # Configuration for Tesseract OCR
-        self.tesseract_path = os.environ.get('TESSERACT_PATH', 'tesseract')
-        pytesseract.pytesseract.tesseract_cmd = self.tesseract_path
+        self.temp_dir = tempfile.gettempdir()
+        self.captcha_images_dir = "captcha_images"
+        
+        # Create captcha images directory if it doesn't exist
+        if not os.path.exists(self.captcha_images_dir):
+            os.makedirs(self.captcha_images_dir)
+        
+        # Configure pytesseract path (update this with your Tesseract OCR installation path)
+        # This is for Windows - adjust for your OS
+        tesseract_path = os.environ.get('TESSERACT_PATH')
+        if tesseract_path:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        
+        logger.info("CaptchaHandler initialized")
     
     def handle_captcha(self, params: Dict[str, Any]) -> bool:
         """
@@ -57,7 +64,7 @@ class CaptchaHandler:
                 logger.error(f"Unknown CAPTCHA type: {captcha_type}")
                 return False
         except Exception as e:
-            logger.error(f"CAPTCHA handling failed: {str(e)}")
+            logger.error(f"Error handling CAPTCHA: {str(e)}")
             return False
     
     def _handle_image_captcha(self, params: Dict[str, Any]) -> bool:
@@ -70,112 +77,115 @@ class CaptchaHandler:
         Returns:
             bool: True if CAPTCHA handled successfully, False otherwise
         """
-        from web_automation import WebAutomation
+        image_path = params.get('image_path', '')
+        selector = params.get('selector', {})
         
-        # Get the web automation instance from params
-        web = params.get('web_automation')
-        if not web or not isinstance(web, WebAutomation) or not web.driver:
-            logger.error("Valid WebAutomation instance required for image CAPTCHA handling")
+        if not image_path and not selector:
+            logger.error("No image path or selector provided")
             return False
         
-        # Get the image element
-        image_selector = params.get('image_selector', {})
-        if not image_selector:
-            logger.error("No image selector provided for image CAPTCHA")
-            return False
-        
-        # Get the input field where to enter the CAPTCHA solution
-        input_selector = params.get('input_selector', {})
-        if not input_selector:
-            logger.error("No input selector provided for image CAPTCHA")
-            return False
-        
-        # Find the image element
-        image_element = web._find_element(image_selector)
-        if not image_element:
-            logger.error("CAPTCHA image element not found")
-            return False
+        # If we have a selector, we need to get the image from a web element
+        # This would be handled by the web automation module and passed as an image path
         
         try:
-            # Get the image data
-            # Method 1: Take a screenshot of the element
-            image_element.screenshot('temp_captcha.png')
+            # Create a timestamped filename if saving the image
+            if params.get('save_image', False):
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                save_path = os.path.join(self.captcha_images_dir, f"captcha_{timestamp}.png")
+                # Copy the image to the save location
+                if image_path:
+                    import shutil
+                    shutil.copy2(image_path, save_path)
+                    logger.info(f"Saved CAPTCHA image to {save_path}")
             
-            # Preprocess the image
-            image = cv2.imread('temp_captcha.png')
+            # Preprocess and OCR the image
+            text = self._ocr_captcha_image(image_path, params.get('preprocessing', 'default'))
             
-            # Apply preprocessing to improve OCR accuracy
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-            
-            # Noise removal
-            kernel = np.ones((2, 2), np.uint8)
-            opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-            
-            # Save preprocessed image
-            cv2.imwrite('processed_captcha.png', opening)
-            
-            # OCR to get text
-            captcha_text = pytesseract.image_to_string(Image.open('processed_captcha.png'), 
-                                                      config='--psm 8 --oem 3 -c tessedit_char_whitelist=0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
-            
-            # Clean up the recognized text
-            captcha_text = captcha_text.strip()
-            
-            if not captcha_text:
-                logger.warning("OCR failed to recognize CAPTCHA text")
-                # Clean up
-                if os.path.exists('temp_captcha.png'):
-                    os.remove('temp_captcha.png')
-                if os.path.exists('processed_captcha.png'):
-                    os.remove('processed_captcha.png')
+            if not text:
+                logger.warning("OCR failed to extract text from CAPTCHA image")
                 return False
             
-            logger.info(f"Recognized CAPTCHA text: {captcha_text}")
+            logger.info(f"OCR extracted text from CAPTCHA: '{text}'")
             
-            # Find and fill the input field
-            input_element = web._find_element(input_selector)
-            if not input_element:
-                logger.error("CAPTCHA input element not found")
-                return False
+            # Provide the text for web automation to fill in
+            params['result'] = text
             
-            # Clear and enter the recognized text
-            input_element.clear()
-            input_element.send_keys(captcha_text)
-            
-            # Submit if required
-            if params.get('submit', False):
-                submit_selector = params.get('submit_selector')
-                if submit_selector:
-                    submit_element = web._find_element(submit_selector)
-                    if submit_element:
-                        submit_element.click()
-                    else:
-                        logger.warning("Submit element not found, trying to submit form")
-                        input_element.submit()
-                else:
-                    logger.info("Submitting form")
-                    input_element.submit()
-            
-            # Clean up
-            if os.path.exists('temp_captcha.png'):
-                os.remove('temp_captcha.png')
-            if os.path.exists('processed_captcha.png'):
-                os.remove('processed_captcha.png')
-            
-            logger.info("Image CAPTCHA handled successfully")
             return True
-            
         except Exception as e:
-            logger.error(f"Image CAPTCHA handling failed: {str(e)}")
-            
-            # Clean up
-            if os.path.exists('temp_captcha.png'):
-                os.remove('temp_captcha.png')
-            if os.path.exists('processed_captcha.png'):
-                os.remove('processed_captcha.png')
-                
+            logger.error(f"Image CAPTCHA handling error: {str(e)}")
             return False
+    
+    def _ocr_captcha_image(self, image_path: str, preprocessing: str) -> Optional[str]:
+        """
+        Use OCR to extract text from a CAPTCHA image.
+        
+        Args:
+            image_path: Path to the CAPTCHA image
+            preprocessing: Type of preprocessing to apply ('default', 'threshold', etc.)
+            
+        Returns:
+            str: Extracted text or None if failed
+        """
+        try:
+            # Read the image
+            image = cv2.imread(image_path)
+            if image is None:
+                logger.error(f"Failed to read image: {image_path}")
+                return None
+            
+            # Apply preprocessing based on the type
+            if preprocessing == 'threshold':
+                # Convert to grayscale
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                # Apply threshold
+                _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
+                # Noise removal (optional)
+                kernel = np.ones((2, 2), np.uint8)
+                cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+                
+                # Save preprocessed image for debugging if needed
+                if os.environ.get('DEBUG', '').lower() == 'true':
+                    cv2.imwrite(os.path.join(self.temp_dir, "captcha_preprocessed.png"), cleaned)
+                
+                # Convert back to PIL format for tesseract
+                pil_image = Image.fromarray(cleaned)
+                
+            elif preprocessing == 'adaptive':
+                # Convert to grayscale
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                # Apply adaptive threshold
+                binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                               cv2.THRESH_BINARY, 11, 2)
+                # Noise removal (optional)
+                kernel = np.ones((1, 1), np.uint8)
+                cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+                
+                # Save preprocessed image for debugging if needed
+                if os.environ.get('DEBUG', '').lower() == 'true':
+                    cv2.imwrite(os.path.join(self.temp_dir, "captcha_preprocessed.png"), cleaned)
+                
+                # Convert back to PIL format for tesseract
+                pil_image = Image.fromarray(cleaned)
+                
+            else:  # default or any other value
+                # Use the original image with minimal processing
+                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(image_rgb)
+            
+            # Use pytesseract with specific config for CAPTCHA
+            # psm 7 = treat image as single line of text
+            # psm 8 = treat image as single word
+            # psm 13 = treat image as single line of text with no specific script or language
+            custom_config = r'--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+            text = pytesseract.image_to_string(pil_image, config=custom_config)
+            
+            # Clean up the text (remove whitespace, newlines, etc.)
+            text = re.sub(r'[\s\n]+', '', text).strip()
+            
+            return text
+        except Exception as e:
+            logger.error(f"OCR error: {str(e)}")
+            return None
     
     def _handle_recaptcha(self, params: Dict[str, Any]) -> bool:
         """
@@ -188,55 +198,47 @@ class CaptchaHandler:
         Returns:
             bool: True if CAPTCHA handled successfully, False otherwise
         """
-        from web_automation import WebAutomation
+        recaptcha_version = params.get('version', 'v2')
         
-        # Get the web automation instance from params
-        web = params.get('web_automation')
-        if not web or not isinstance(web, WebAutomation) or not web.driver:
-            logger.error("Valid WebAutomation instance required for reCAPTCHA handling")
-            return False
-        
-        try:
-            # Switch to the reCAPTCHA frame
-            frames = web.driver.find_elements(By.TAG_NAME, "iframe")
-            recaptcha_frame = None
+        if recaptcha_version.lower() == 'v2':
+            logger.warning("reCAPTCHA v2 typically requires manual intervention")
             
-            for frame in frames:
-                if "recaptcha" in frame.get_attribute("src").lower():
-                    recaptcha_frame = frame
-                    break
-            
-            if not recaptcha_frame:
-                logger.error("reCAPTCHA frame not found")
-                return False
-            
-            # Switch to the reCAPTCHA frame
-            web.driver.switch_to.frame(recaptcha_frame)
-            
-            # Find and click the checkbox (for v2 reCAPTCHA)
-            checkbox = WebDriverWait(web.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "recaptcha-anchor"))
-            )
-            checkbox.click()
-            
-            # Switch back to the main content
-            web.driver.switch_to.default_content()
-            
-            # Wait for user to solve the challenge if needed
-            # This is where we'd need to handle image challenges, but that's very complex
-            # For now, we'll wait for manual intervention if automatic clicking doesn't work
-            
-            logger.info("Attempted to handle reCAPTCHA - may require manual intervention")
-            
-            # Pause to allow manual solving if needed
-            if params.get('allow_manual', True):
-                logger.info("Waiting for manual reCAPTCHA intervention if needed")
-                wait_time = params.get('manual_wait', 30)  # Default 30 seconds
-                time.sleep(wait_time)
-            
+            # For v2 with checkbox, we can attempt to click the checkbox
+            if params.get('checkbox', True):
+                logger.info("Attempting to click reCAPTCHA checkbox")
+                
+                # The actual click would need to be handled by the web automation module
+                # We just return an indication that manual intervention is likely needed
+                params['result'] = {
+                    'solved': False,
+                    'needs_manual': True,
+                    'message': "reCAPTCHA v2 likely needs manual intervention"
+                }
+                
+                # We return True to continue the script, but the script should check the result
+                return True
+            else:
+                # For invisible reCAPTCHA, we have limited options
+                logger.warning("Invisible reCAPTCHA detected, continuing with script")
+                params['result'] = {
+                    'solved': False,
+                    'needs_manual': True,
+                    'message': "Invisible reCAPTCHA detected"
+                }
+                return True
+                
+        elif recaptcha_version.lower() == 'v3':
+            # v3 doesn't require user interaction, it runs in the background
+            logger.info("reCAPTCHA v3 detected, continuing with script")
+            params['result'] = {
+                'solved': True,
+                'needs_manual': False,
+                'message': "reCAPTCHA v3 should not require interaction"
+            }
             return True
-        except Exception as e:
-            logger.error(f"reCAPTCHA handling failed: {str(e)}")
+        
+        else:
+            logger.error(f"Unknown reCAPTCHA version: {recaptcha_version}")
             return False
     
     def _handle_audio_captcha(self, params: Dict[str, Any]) -> bool:
@@ -250,17 +252,21 @@ class CaptchaHandler:
         Returns:
             bool: True if CAPTCHA handled successfully, False otherwise
         """
+        # Audio CAPTCHA handling is complex and typically requires:
+        # 1. Clicking an audio button (handled by web automation)
+        # 2. Downloading the audio file
+        # 3. Converting audio to text using speech recognition
+        
         logger.warning("Audio CAPTCHA handling is not fully implemented")
         
-        # This would require speech recognition capabilities
-        # For now, we'll recommend manual intervention
-        if params.get('allow_manual', True):
-            logger.info("Waiting for manual audio CAPTCHA intervention")
-            wait_time = params.get('manual_wait', 30)  # Default 30 seconds
-            time.sleep(wait_time)
-            return True
+        # For now, we recommend manual intervention
+        params['result'] = {
+            'solved': False,
+            'needs_manual': True,
+            'message': "Audio CAPTCHA requires manual intervention"
+        }
         
-        return False
+        return self._handle_manual_captcha(params)
     
     def _handle_text_captcha(self, params: Dict[str, Any]) -> bool:
         """
@@ -272,83 +278,24 @@ class CaptchaHandler:
         Returns:
             bool: True if CAPTCHA handled successfully, False otherwise
         """
-        from web_automation import WebAutomation
+        question = params.get('question', '')
         
-        # Get the web automation instance from params
-        web = params.get('web_automation')
-        if not web or not isinstance(web, WebAutomation) or not web.driver:
-            logger.error("Valid WebAutomation instance required for text CAPTCHA handling")
+        if not question:
+            logger.error("No question provided for text CAPTCHA")
             return False
         
-        # Get the question element
-        question_selector = params.get('question_selector', {})
-        if not question_selector:
-            logger.error("No question selector provided for text CAPTCHA")
-            return False
+        # Attempt to solve the text CAPTCHA
+        answer = self._solve_text_captcha(question)
         
-        # Get the input field where to enter the CAPTCHA solution
-        input_selector = params.get('input_selector', {})
-        if not input_selector:
-            logger.error("No input selector provided for text CAPTCHA")
-            return False
-        
-        try:
-            # Find the question element
-            question_element = web._find_element(question_selector)
-            if not question_element:
-                logger.error("CAPTCHA question element not found")
-                return False
-            
-            # Get the question text
-            question_text = question_element.text.strip()
-            logger.info(f"Text CAPTCHA question: {question_text}")
-            
-            # Attempt to solve the question (basic math operations)
-            answer = self._solve_text_captcha(question_text)
-            if answer is None:
-                logger.warning("Failed to solve text CAPTCHA")
-                
-                # Wait for manual intervention if allowed
-                if params.get('allow_manual', True):
-                    logger.info("Waiting for manual text CAPTCHA intervention")
-                    wait_time = params.get('manual_wait', 30)
-                    time.sleep(wait_time)
-                    return True
-                
-                return False
-            
-            logger.info(f"Calculated CAPTCHA answer: {answer}")
-            
-            # Find and fill the input field
-            input_element = web._find_element(input_selector)
-            if not input_element:
-                logger.error("CAPTCHA input element not found")
-                return False
-            
-            # Clear and enter the answer
-            input_element.clear()
-            input_element.send_keys(str(answer))
-            
-            # Submit if required
-            if params.get('submit', False):
-                submit_selector = params.get('submit_selector')
-                if submit_selector:
-                    submit_element = web._find_element(submit_selector)
-                    if submit_element:
-                        submit_element.click()
-                    else:
-                        logger.warning("Submit element not found, trying to submit form")
-                        input_element.submit()
-                else:
-                    logger.info("Submitting form")
-                    input_element.submit()
-            
-            logger.info("Text CAPTCHA handled successfully")
+        if answer:
+            logger.info(f"Solved text CAPTCHA: '{question}' -> '{answer}'")
+            params['result'] = answer
             return True
+        else:
+            logger.warning(f"Could not solve text CAPTCHA: '{question}'")
             
-        except Exception as e:
-            logger.error(f"Text CAPTCHA handling failed: {str(e)}")
-            return False
+            # If we can't solve it, we might need manual intervention
+            return self._handle_manual_captcha(params)
     
     def _solve_text_captcha(self, question: str) -> Optional[str]:
         """
@@ -360,17 +307,14 @@ class CaptchaHandler:
         Returns:
             str: The answer if found, None otherwise
         """
-        import re
+        # Handling simple math questions like "What is 5 + 3?"
+        math_pattern = r'what\s+is\s+(\d+)\s*([\+\-\*\/])\s*(\d+)'
+        matches = re.search(math_pattern, question.lower())
         
-        # Basic math problem solver (addition, subtraction, multiplication)
-        # Pattern: "What is X operator Y?"
-        math_pattern = r"what is (\d+)\s*([+\-*])\s*(\d+)"
-        match = re.search(math_pattern, question.lower())
-        
-        if match:
-            num1 = int(match.group(1))
-            operator = match.group(2)
-            num2 = int(match.group(3))
+        if matches:
+            num1 = int(matches.group(1))
+            operator = matches.group(2)
+            num2 = int(matches.group(3))
             
             if operator == '+':
                 return str(num1 + num2)
@@ -378,14 +322,18 @@ class CaptchaHandler:
                 return str(num1 - num2)
             elif operator == '*':
                 return str(num1 * num2)
+            elif operator == '/':
+                # Avoid division by zero
+                if num2 == 0:
+                    return None
+                return str(int(num1 / num2))
         
-        # Check for "enter the number X" type challenges
-        number_pattern = r"enter the number (\d+)"
-        match = re.search(number_pattern, question.lower())
-        if match:
-            return match.group(1)
-        
-        # Add more patterns as needed for different text CAPTCHA types
+        # Handling "type the characters you see" type questions
+        if 'type the characters' in question.lower() or 'enter the text' in question.lower():
+            # This would require OCR on an associated image, which should be
+            # handled by _handle_image_captcha instead
+            logger.warning("This appears to be an image CAPTCHA question")
+            return None
         
         return None
     
@@ -399,10 +347,17 @@ class CaptchaHandler:
         Returns:
             bool: Always returns True after waiting
         """
-        wait_time = params.get('wait_time', 30)  # Default 30 seconds
+        wait_time = params.get('wait_time', 30)  # Default wait time: 30 seconds
+        
         logger.info(f"Waiting {wait_time} seconds for manual CAPTCHA intervention")
+        
+        # In a real implementation, you might want to show a notification or alert
+        # to the user that manual intervention is needed
+        
+        # Simple wait implementation
         time.sleep(wait_time)
         
-        # Add a "continue" message to let the user know automation will resume
-        logger.info("Resuming automation after manual CAPTCHA handling")
+        logger.info("Resuming automation after manual intervention wait time")
+        
+        # We always return True after waiting, assuming the user handled the CAPTCHA
         return True

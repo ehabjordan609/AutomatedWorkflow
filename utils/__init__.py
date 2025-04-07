@@ -1,3 +1,3 @@
 """
-Utility package for the Automation Tool application.
+Utility modules package for the Automation Tool.
 """

@@ -1,544 +1,352 @@
+#!/usr/bin/env python3
 """
-Main window of the Automation Tool application.
+Main window module for the Automation Tool GUI.
 """
-import sys
 import os
+import sys
+import time
 import logging
-from typing import Optional, List, Dict, Any
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-    QPushButton, QLabel, QStatusBar, QAction, QToolBar, QFileDialog,
-    QMessageBox, QSplitter, QListWidget, QListWidgetItem, QMenu, QDialog
+    QMainWindow, QTabWidget, QAction, QFileDialog, QMessageBox, 
+    QApplication, QLabel, QStatusBar, QToolBar, QDockWidget
 )
-from PyQt5.QtCore import Qt, QSize, pyqtSignal, QTimer
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtGui import QIcon, QPixmap
 
 from gui.script_editor import ScriptEditorWidget
 from gui.recorder import RecorderWidget
 from gui.player import PlayerWidget
-from script_manager import ScriptManager
 from automation_engine import AutomationEngine
+from script_manager import ScriptManager
 
 logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
-    """
-    Main window of the Automation Tool application.
-    """
+    """Main window of the Automation Tool GUI application."""
     
     def __init__(self):
         """Initialize the main window."""
         super().__init__()
         
+        # Initialize components
         self.script_manager = ScriptManager()
         self.automation_engine = AutomationEngine()
         
-        self.setWindowTitle("Automation Tool")
-        self.setMinimumSize(1000, 700)
-        
-        self._create_ui()
+        # Set up UI
+        self._setup_ui()
+        self._create_actions()
         self._create_menus()
-        self._create_toolbar()
+        self._create_toolbars()
         self._create_status_bar()
-        
-        # Connect signals and slots
         self._connect_signals()
+        
+        # Load settings
+        self._load_settings()
         
         logger.info("Main window initialized")
     
-    def _create_ui(self):
-        """Create the main UI components."""
-        # Central widget and main layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+    def _setup_ui(self):
+        """Set up the user interface elements."""
+        # Set window properties
+        self.setWindowTitle("Automation Tool")
+        self.setMinimumSize(800, 600)
         
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(5, 5, 5, 5)
+        # Create central tab widget
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
         
-        # Main splitter
-        self.main_splitter = QSplitter(Qt.Horizontal)
-        main_layout.addWidget(self.main_splitter)
-        
-        # Left panel for script list
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Script list
-        script_list_label = QLabel("Available Scripts")
-        script_list_label.setStyleSheet("font-weight: bold;")
-        left_layout.addWidget(script_list_label)
-        
-        self.script_list = QListWidget()
-        self.script_list.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.script_list.customContextMenuRequested.connect(self._show_script_context_menu)
-        left_layout.addWidget(self.script_list)
-        
-        # New script button
-        new_script_button = QPushButton("New Script")
-        new_script_button.clicked.connect(self._create_new_script)
-        left_layout.addWidget(new_script_button)
-        
-        # Add left panel to splitter
-        self.main_splitter.addWidget(left_panel)
-        
-        # Right panel with tabs
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Tab widget
-        self.tab_widget = QTabWidget()
-        
-        # Script editor tab
-        self.script_editor = ScriptEditorWidget(self.script_manager)
-        self.tab_widget.addTab(self.script_editor, "Script Editor")
-        
-        # Recorder tab
-        self.recorder = RecorderWidget(self.script_manager)
-        self.tab_widget.addTab(self.recorder, "Recorder")
-        
-        # Player tab
+        # Create tab contents
+        self.script_editor = ScriptEditorWidget(self.script_manager, self.automation_engine)
+        self.recorder = RecorderWidget(self.script_manager, self.automation_engine)
         self.player = PlayerWidget(self.script_manager, self.automation_engine)
-        self.tab_widget.addTab(self.player, "Player")
         
-        right_layout.addWidget(self.tab_widget)
+        # Add tabs
+        self.tabs.addTab(self.script_editor, "Script Editor")
+        self.tabs.addTab(self.recorder, "Recorder")
+        self.tabs.addTab(self.player, "Player")
         
-        # Add right panel to splitter
-        self.main_splitter.addWidget(right_panel)
+        # Set icons if available
+        try:
+            if os.path.exists("icons/script.png"):
+                self.tabs.setTabIcon(0, QIcon("icons/script.png"))
+            if os.path.exists("icons/record.png"):
+                self.tabs.setTabIcon(1, QIcon("icons/record.png"))
+            if os.path.exists("icons/play.png"):
+                self.tabs.setTabIcon(2, QIcon("icons/play.png"))
+        except Exception as e:
+            logger.warning(f"Could not load tab icons: {str(e)}")
+    
+    def _create_actions(self):
+        """Create all actions for the application."""
+        # File actions
+        self.new_action = QAction("New Script", self)
+        self.new_action.setShortcut("Ctrl+N")
+        self.new_action.setStatusTip("Create a new script")
+        self.new_action.triggered.connect(self._new_script)
         
-        # Set splitter sizes
-        self.main_splitter.setSizes([200, 800])
+        self.open_action = QAction("Open Script", self)
+        self.open_action.setShortcut("Ctrl+O")
+        self.open_action.setStatusTip("Open an existing script")
+        self.open_action.triggered.connect(self._open_script)
         
-        # Populate script list
-        self._refresh_script_list()
+        self.save_action = QAction("Save", self)
+        self.save_action.setShortcut("Ctrl+S")
+        self.save_action.setStatusTip("Save the current script")
+        self.save_action.triggered.connect(self._save_script)
+        
+        self.save_as_action = QAction("Save As...", self)
+        self.save_as_action.setShortcut("Ctrl+Shift+S")
+        self.save_as_action.setStatusTip("Save the current script with a new name")
+        self.save_as_action.triggered.connect(self._save_script_as)
+        
+        self.exit_action = QAction("Exit", self)
+        self.exit_action.setShortcut("Ctrl+Q")
+        self.exit_action.setStatusTip("Exit the application")
+        self.exit_action.triggered.connect(self._exit_application)
+        
+        # Edit actions
+        self.preferences_action = QAction("Preferences", self)
+        self.preferences_action.setStatusTip("Configure application preferences")
+        self.preferences_action.triggered.connect(self._show_preferences)
+        
+        # Script actions
+        self.validate_action = QAction("Validate Script", self)
+        self.validate_action.setStatusTip("Validate the current script")
+        self.validate_action.triggered.connect(self._validate_script)
+        
+        # Help actions
+        self.about_action = QAction("About", self)
+        self.about_action.setStatusTip("Show information about the application")
+        self.about_action.triggered.connect(self._show_about)
+        
+        self.help_action = QAction("Help", self)
+        self.help_action.setShortcut("F1")
+        self.help_action.setStatusTip("Show help documentation")
+        self.help_action.triggered.connect(self._show_help)
     
     def _create_menus(self):
-        """Create the application menus."""
+        """Create all menus for the application."""
         # File menu
-        file_menu = self.menuBar().addMenu("&File")
-        
-        new_action = QAction("&New Script", self)
-        new_action.setShortcut("Ctrl+N")
-        new_action.triggered.connect(self._create_new_script)
-        file_menu.addAction(new_action)
-        
-        open_action = QAction("&Open Script", self)
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self._open_script)
-        file_menu.addAction(open_action)
-        
-        save_action = QAction("&Save Script", self)
-        save_action.setShortcut("Ctrl+S")
-        save_action.triggered.connect(self._save_script)
-        file_menu.addAction(save_action)
-        
-        save_as_action = QAction("Save Script &As...", self)
-        save_as_action.setShortcut("Ctrl+Shift+S")
-        save_as_action.triggered.connect(self._save_script_as)
-        file_menu.addAction(save_as_action)
-        
-        file_menu.addSeparator()
-        
-        exit_action = QAction("E&xit", self)
-        exit_action.setShortcut("Alt+F4")
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
+        self.file_menu = self.menuBar().addMenu("&File")
+        self.file_menu.addAction(self.new_action)
+        self.file_menu.addAction(self.open_action)
+        self.file_menu.addSeparator()
+        self.file_menu.addAction(self.save_action)
+        self.file_menu.addAction(self.save_as_action)
+        self.file_menu.addSeparator()
+        self.file_menu.addAction(self.exit_action)
         
         # Edit menu
-        edit_menu = self.menuBar().addMenu("&Edit")
+        self.edit_menu = self.menuBar().addMenu("&Edit")
+        self.edit_menu.addAction(self.preferences_action)
         
-        undo_action = QAction("&Undo", self)
-        undo_action.setShortcut("Ctrl+Z")
-        edit_menu.addAction(undo_action)
-        
-        redo_action = QAction("&Redo", self)
-        redo_action.setShortcut("Ctrl+Y")
-        edit_menu.addAction(redo_action)
-        
-        edit_menu.addSeparator()
-        
-        preferences_action = QAction("&Preferences", self)
-        edit_menu.addAction(preferences_action)
-        
-        # Run menu
-        run_menu = self.menuBar().addMenu("&Run")
-        
-        run_action = QAction("&Run Script", self)
-        run_action.setShortcut("F5")
-        run_action.triggered.connect(self._run_script)
-        run_menu.addAction(run_action)
-        
-        run_step_action = QAction("Run &Step by Step", self)
-        run_step_action.setShortcut("F6")
-        run_step_action.triggered.connect(self._run_script_step_by_step)
-        run_menu.addAction(run_step_action)
-        
-        stop_action = QAction("&Stop Execution", self)
-        stop_action.setShortcut("F8")
-        stop_action.triggered.connect(self._stop_script)
-        run_menu.addAction(stop_action)
+        # Script menu
+        self.script_menu = self.menuBar().addMenu("&Script")
+        self.script_menu.addAction(self.validate_action)
         
         # Help menu
-        help_menu = self.menuBar().addMenu("&Help")
-        
-        about_action = QAction("&About", self)
-        about_action.triggered.connect(self._show_about_dialog)
-        help_menu.addAction(about_action)
+        self.help_menu = self.menuBar().addMenu("&Help")
+        self.help_menu.addAction(self.help_action)
+        self.help_menu.addSeparator()
+        self.help_menu.addAction(self.about_action)
     
-    def _create_toolbar(self):
-        """Create the application toolbar."""
-        toolbar = QToolBar("Main Toolbar")
-        toolbar.setIconSize(QSize(24, 24))
-        self.addToolBar(toolbar)
+    def _create_toolbars(self):
+        """Create all toolbars for the application."""
+        # Main toolbar
+        self.main_toolbar = QToolBar("Main Toolbar")
+        self.main_toolbar.setMovable(False)
+        self.main_toolbar.setIconSize(QSize(24, 24))
+        self.addToolBar(self.main_toolbar)
         
-        # New script action
-        new_action = QAction("New", self)
-        new_action.triggered.connect(self._create_new_script)
-        toolbar.addAction(new_action)
+        # Add actions to main toolbar
+        self.main_toolbar.addAction(self.new_action)
+        self.main_toolbar.addAction(self.open_action)
+        self.main_toolbar.addAction(self.save_action)
+        self.main_toolbar.addSeparator()
         
-        # Open script action
-        open_action = QAction("Open", self)
-        open_action.triggered.connect(self._open_script)
-        toolbar.addAction(open_action)
+        # Add specific actions based on current tab
+        self.tabs.currentChanged.connect(self._update_toolbar)
+        self._update_toolbar(0)  # Initial update
+    
+    def _update_toolbar(self, tab_index):
+        """Update the toolbar based on the current tab."""
+        # Clear existing actions after the separator
+        actions = self.main_toolbar.actions()
+        separator_found = False
+        for action in actions[:]:
+            if separator_found:
+                self.main_toolbar.removeAction(action)
+            elif action.isSeparator():
+                separator_found = True
         
-        # Save script action
-        save_action = QAction("Save", self)
-        save_action.triggered.connect(self._save_script)
-        toolbar.addAction(save_action)
-        
-        toolbar.addSeparator()
-        
-        # Run script action
-        run_action = QAction("Run", self)
-        run_action.triggered.connect(self._run_script)
-        toolbar.addAction(run_action)
-        
-        # Step-by-step action
-        step_action = QAction("Step", self)
-        step_action.triggered.connect(self._run_script_step_by_step)
-        toolbar.addAction(step_action)
-        
-        # Stop action
-        stop_action = QAction("Stop", self)
-        stop_action.triggered.connect(self._stop_script)
-        toolbar.addAction(stop_action)
+        # Add tab-specific actions
+        if tab_index == 0:  # Script Editor
+            pass  # No specific toolbar actions for Script Editor yet
+        elif tab_index == 1:  # Recorder
+            self.main_toolbar.addAction(self.recorder.start_action)
+            self.main_toolbar.addAction(self.recorder.stop_action)
+            self.main_toolbar.addAction(self.recorder.save_action)
+        elif tab_index == 2:  # Player
+            self.main_toolbar.addAction(self.player.run_action)
+            self.main_toolbar.addAction(self.player.pause_action)
+            self.main_toolbar.addAction(self.player.stop_action)
+            self.main_toolbar.addAction(self.player.step_action)
     
     def _create_status_bar(self):
-        """Create the application status bar."""
+        """Create the status bar for the application."""
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         
+        # Add permanent widgets to status bar
         self.status_label = QLabel("Ready")
-        self.status_bar.addWidget(self.status_label, 1)
+        self.status_bar.addPermanentWidget(self.status_label)
     
     def _connect_signals(self):
-        """Connect signals and slots."""
-        # Script list selection
-        self.script_list.itemDoubleClicked.connect(self._on_script_double_clicked)
-        
-        # Tab widget signals
-        self.tab_widget.currentChanged.connect(self._on_tab_changed)
-        
+        """Connect signals from child widgets to main window slots."""
         # Script editor signals
-        self.script_editor.script_modified.connect(self._on_script_modified)
+        self.script_editor.script_changed.connect(self._handle_script_changed)
         
         # Player signals
-        self.player.status_changed.connect(self._on_player_status_changed)
+        self.player.execution_started.connect(lambda: self.status_label.setText("Running script..."))
+        self.player.execution_completed.connect(lambda: self.status_label.setText("Script execution completed"))
+        self.player.execution_error.connect(lambda msg: self.status_label.setText(f"Error: {msg}"))
     
-    def _refresh_script_list(self):
-        """Refresh the list of available scripts."""
-        self.script_list.clear()
-        
-        scripts = self.script_manager.get_scripts_list()
-        for script_path in scripts:
-            info = self.script_manager.get_script_info(script_path)
-            if info:
-                item = QListWidgetItem(info["name"])
-                item.setData(Qt.UserRole, script_path)
-                item.setToolTip(f"{info['description']}\n{info['steps_count']} steps")
-                self.script_list.addItem(item)
+    def _load_settings(self):
+        """Load application settings."""
+        # This would typically load from a settings file
+        # For now, just set default values
+        self.resize(1024, 768)
+        self.move(100, 100)
     
-    def _create_new_script(self):
+    def _new_script(self):
         """Create a new script."""
-        # Get script name
-        from PyQt5.QtWidgets import QInputDialog
-        
-        name, ok = QInputDialog.getText(self, "New Script", "Enter script name:")
-        if ok and name:
-            self.script_manager.create_new_script(name)
-            self.script_editor.update_ui()
-            
-            # Switch to editor tab
-            self.tab_widget.setCurrentWidget(self.script_editor)
-            
-            # Update UI state
-            self._update_window_title()
-            self.status_label.setText(f"Created new script: {name}")
-            
-            # Save the script to file
-            self._save_script()
-            
-            # Refresh script list
-            self._refresh_script_list()
+        # Check if there are unsaved changes
+        if self._check_unsaved_changes():
+            name, ok = QInputDialog.getText(self, "New Script", "Enter script name:")
+            if ok and name:
+                self.script_manager.create_new_script(name)
+                self.script_editor.update_script_view()
+                self.status_label.setText(f"Created new script: {name}")
     
-    def _open_script(self, file_path=None):
-        """Open a script file."""
-        if not file_path:
-            # Show file dialog
+    def _open_script(self):
+        """Open an existing script."""
+        # Check if there are unsaved changes
+        if self._check_unsaved_changes():
             file_path, _ = QFileDialog.getOpenFileName(
-                self, "Open Script", 
-                self.script_manager.scripts_dir,
-                "Script Files (*.json);;All Files (*)"
+                self, "Open Script", self.script_manager.scripts_dir, 
+                "JSON Files (*.json);;All Files (*)"
             )
-        
-        if file_path:
-            script = self.script_manager.load_script(file_path)
-            if script:
-                self.script_editor.update_ui()
-                self.player.update_ui()
-                
-                # Switch to editor tab
-                self.tab_widget.setCurrentWidget(self.script_editor)
-                
-                # Update UI state
-                self._update_window_title()
-                self.status_label.setText(f"Opened script: {script['name']}")
-            else:
-                QMessageBox.critical(self, "Error", f"Failed to load script from {file_path}")
+            if file_path:
+                script = self.script_manager.load_script(file_path)
+                if script:
+                    self.script_editor.update_script_view()
+                    self.status_label.setText(f"Opened script: {file_path}")
+                else:
+                    QMessageBox.warning(self, "Error", f"Failed to load script: {file_path}")
     
     def _save_script(self):
         """Save the current script."""
-        if self.script_manager.current_script:
-            if self.script_manager.current_script_path:
-                # Save to existing path
-                if self.script_manager.save_script():
-                    self.status_label.setText("Script saved")
-                else:
-                    QMessageBox.critical(self, "Error", "Failed to save script")
+        if not self.script_manager.current_script:
+            QMessageBox.warning(self, "Error", "No script loaded")
+            return
+        
+        if self.script_manager.current_script_path:
+            # Save to existing path
+            success = self.script_manager.save_script()
+            if success:
+                self.status_label.setText(f"Saved script to: {self.script_manager.current_script_path}")
             else:
-                # No path yet, use save as
-                self._save_script_as()
+                QMessageBox.warning(self, "Error", "Failed to save script")
+        else:
+            # No path yet, use save as
+            self._save_script_as()
     
     def _save_script_as(self):
         """Save the current script with a new name."""
-        if self.script_manager.current_script:
-            # Show file dialog
-            default_name = f"{self.script_manager.current_script['name'].replace(' ', '_').lower()}.json"
-            file_path, _ = QFileDialog.getSaveFileName(
-                self, "Save Script As", 
-                os.path.join(self.script_manager.scripts_dir, default_name),
-                "Script Files (*.json);;All Files (*)"
-            )
-            
-            if file_path:
-                if self.script_manager.save_script(file_path):
-                    self.status_label.setText(f"Script saved as: {file_path}")
-                    self._update_window_title()
-                    self._refresh_script_list()
-                else:
-                    QMessageBox.critical(self, "Error", "Failed to save script")
-    
-    def _run_script(self):
-        """Run the current script."""
         if not self.script_manager.current_script:
-            QMessageBox.warning(self, "Warning", "No script loaded")
+            QMessageBox.warning(self, "Error", "No script loaded")
             return
         
-        # Switch to player tab
-        self.tab_widget.setCurrentWidget(self.player)
-        
-        # Run the script
-        self.player.run_script()
-    
-    def _run_script_step_by_step(self):
-        """Run the current script step by step."""
-        if not self.script_manager.current_script:
-            QMessageBox.warning(self, "Warning", "No script loaded")
-            return
-        
-        # Switch to player tab
-        self.tab_widget.setCurrentWidget(self.player)
-        
-        # Run the script step by step
-        self.player.run_script(step_by_step=True)
-    
-    def _stop_script(self):
-        """Stop script execution."""
-        self.player.stop_script()
-    
-    def _on_script_double_clicked(self, item):
-        """Handle double-click on script list item."""
-        script_path = item.data(Qt.UserRole)
-        self._open_script(script_path)
-    
-    def _on_tab_changed(self, index):
-        """Handle tab widget selection change."""
-        # Update UI state based on selected tab
-        selected_widget = self.tab_widget.widget(index)
-        
-        if selected_widget == self.script_editor:
-            self.script_editor.update_ui()
-        elif selected_widget == self.player:
-            self.player.update_ui()
-        elif selected_widget == self.recorder:
-            self.recorder.update_ui()
-    
-    def _on_script_modified(self):
-        """Handle script modification event."""
-        # Update window title to indicate unsaved changes
-        self._update_window_title(modified=True)
-    
-    def _on_player_status_changed(self, status):
-        """Handle player status change."""
-        self.status_label.setText(status)
-    
-    def _update_window_title(self, modified=False):
-        """Update the window title with current script info."""
-        if self.script_manager.current_script:
-            script_name = self.script_manager.current_script['name']
-            title = f"Automation Tool - {script_name}"
-            
-            if modified:
-                title += " *"
-                
-            if self.script_manager.current_script_path:
-                title += f" ({self.script_manager.current_script_path})"
-                
-            self.setWindowTitle(title)
-        else:
-            self.setWindowTitle("Automation Tool")
-    
-    def _show_script_context_menu(self, position):
-        """Show context menu for script list items."""
-        item = self.script_list.itemAt(position)
-        if not item:
-            return
-        
-        context_menu = QMenu(self)
-        
-        open_action = context_menu.addAction("Open")
-        rename_action = context_menu.addAction("Rename")
-        duplicate_action = context_menu.addAction("Duplicate")
-        delete_action = context_menu.addAction("Delete")
-        
-        action = context_menu.exec_(self.script_list.mapToGlobal(position))
-        
-        if action == open_action:
-            self._open_script(item.data(Qt.UserRole))
-        elif action == rename_action:
-            self._rename_script(item)
-        elif action == duplicate_action:
-            self._duplicate_script(item)
-        elif action == delete_action:
-            self._delete_script(item)
-    
-    def _rename_script(self, item):
-        """Rename a script."""
-        from PyQt5.QtWidgets import QInputDialog
-        
-        script_path = item.data(Qt.UserRole)
-        info = self.script_manager.get_script_info(script_path)
-        
-        if info:
-            new_name, ok = QInputDialog.getText(
-                self, "Rename Script", 
-                "Enter new name:", 
-                text=info["name"]
-            )
-            
-            if ok and new_name:
-                # Load the script
-                script = self.script_manager.load_script(script_path)
-                if script:
-                    # Update name
-                    script["name"] = new_name
-                    
-                    # Save back to same file
-                    if self.script_manager.save_script(script_path):
-                        self.status_label.setText(f"Renamed script to: {new_name}")
-                        self._refresh_script_list()
-                    else:
-                        QMessageBox.critical(self, "Error", "Failed to rename script")
-    
-    def _duplicate_script(self, item):
-        """Duplicate a script."""
-        script_path = item.data(Qt.UserRole)
-        info = self.script_manager.get_script_info(script_path)
-        
-        if info:
-            # Load the script
-            script = self.script_manager.load_script(script_path)
-            if script:
-                # Update name to indicate copy
-                script["name"] = f"{script['name']} (Copy)"
-                
-                # Reset the path to force "save as"
-                self.script_manager.current_script_path = None
-                
-                # Save with new name
-                self._save_script_as()
-    
-    def _delete_script(self, item):
-        """Delete a script."""
-        script_path = item.data(Qt.UserRole)
-        info = self.script_manager.get_script_info(script_path)
-        
-        if info:
-            # Confirm deletion
-            response = QMessageBox.question(
-                self, "Confirm Deletion",
-                f"Are you sure you want to delete the script '{info['name']}'?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            
-            if response == QMessageBox.Yes:
-                try:
-                    # Delete the file
-                    os.remove(script_path)
-                    self.status_label.setText(f"Deleted script: {info['name']}")
-                    
-                    # If this was the current script, clear it
-                    if (self.script_manager.current_script_path and 
-                        self.script_manager.current_script_path == script_path):
-                        self.script_manager.current_script = None
-                        self.script_manager.current_script_path = None
-                        self.script_editor.update_ui()
-                        self.player.update_ui()
-                        self._update_window_title()
-                    
-                    # Refresh the list
-                    self._refresh_script_list()
-                    
-                except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to delete script: {str(e)}")
-    
-    def _show_about_dialog(self):
-        """Show the about dialog."""
-        QMessageBox.about(
-            self, "About Automation Tool",
-            "Automation Tool\n\n"
-            "A desktop application for automating user actions including "
-            "screen interactions, web browsing, and CAPTCHA handling.\n\n"
-            "Version: 1.0"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Script As", self.script_manager.scripts_dir, 
+            "JSON Files (*.json);;All Files (*)"
         )
+        if file_path:
+            success = self.script_manager.save_script(file_path)
+            if success:
+                self.status_label.setText(f"Saved script to: {file_path}")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to save script")
     
-    def closeEvent(self, event):
-        """Handle window close event."""
-        # Check for unsaved changes
-        if self.script_manager.current_script:
-            response = QMessageBox.question(
-                self, "Confirm Exit",
-                "Do you want to save changes before exiting?",
+    def _validate_script(self):
+        """Validate the current script."""
+        if not self.script_manager.current_script:
+            QMessageBox.warning(self, "Error", "No script loaded")
+            return
+        
+        errors = self.script_manager.validate_script()
+        if errors:
+            error_text = "\n".join(errors)
+            QMessageBox.warning(self, "Validation Errors", f"The script has the following errors:\n\n{error_text}")
+        else:
+            QMessageBox.information(self, "Validation", "The script is valid.")
+    
+    def _show_preferences(self):
+        """Show the preferences dialog."""
+        # This would be implemented with a PreferencesDialog class
+        QMessageBox.information(self, "Preferences", "Preferences dialog would be shown here.")
+    
+    def _show_about(self):
+        """Show the about dialog."""
+        QMessageBox.about(self, "About Automation Tool", 
+                         "Automation Tool\n\n"
+                         "Version 1.0\n\n"
+                         "A desktop automation tool for automating repetitive tasks.")
+    
+    def _show_help(self):
+        """Show the help documentation."""
+        # This would open a help window or a web browser with documentation
+        QMessageBox.information(self, "Help", "Help documentation would be shown here.")
+    
+    def _exit_application(self):
+        """Exit the application."""
+        # Check if there are unsaved changes
+        if self._check_unsaved_changes():
+            QApplication.quit()
+    
+    def _check_unsaved_changes(self):
+        """
+        Check if there are unsaved changes and ask the user what to do.
+        
+        Returns:
+            bool: True if it's okay to proceed, False to cancel
+        """
+        # This is a simplified implementation
+        # In a real app, would track modifications and only prompt if needed
+        if self.script_manager.current_script and self.script_editor.has_unsaved_changes:
+            result = QMessageBox.question(
+                self, "Unsaved Changes", 
+                "There are unsaved changes. Do you want to save them?",
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
             )
             
-            if response == QMessageBox.Save:
-                self._save_script()
-                event.accept()
-            elif response == QMessageBox.Cancel:
-                event.ignore()
-            else:  # Discard
-                event.accept()
-        else:
+            if result == QMessageBox.Save:
+                return self._save_script()
+            elif result == QMessageBox.Cancel:
+                return False
+        
+        return True
+    
+    def _handle_script_changed(self):
+        """Handle script content changes."""
+        # Update the window title to indicate unsaved changes
+        if self.script_manager.current_script:
+            script_name = self.script_manager.current_script.get('name', 'Untitled')
+            self.setWindowTitle(f"Automation Tool - {script_name} *")
+    
+    def closeEvent(self, event):
+        """Handle the window close event."""
+        if self._check_unsaved_changes():
             event.accept()
+        else:
+            event.ignore()

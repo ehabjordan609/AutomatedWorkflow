@@ -1,11 +1,12 @@
+#!/usr/bin/env python3
 """
 Script manager for loading, saving, and managing automation scripts.
 """
 import os
 import json
-import logging
 import time
-from typing import Dict, List, Any, Optional
+import logging
+from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,9 @@ class ScriptManager:
         self.current_script_path = None
         
         # Create scripts directory if it doesn't exist
-        os.makedirs(self.scripts_dir, exist_ok=True)
+        if not os.path.exists(self.scripts_dir):
+            os.makedirs(self.scripts_dir)
+            logger.info(f"Created scripts directory: {self.scripts_dir}")
     
     def create_new_script(self, name: str) -> Dict[str, Any]:
         """
@@ -43,6 +46,7 @@ class ScriptManager:
             "description": "",
             "created": time.time(),
             "modified": time.time(),
+            "version": "1.0",
             "steps": []
         }
         
@@ -62,15 +66,15 @@ class ScriptManager:
             dict: The loaded script, or None if loading failed
         """
         try:
-            with open(file_path, 'r') as f:
-                script = json.load(f)
+            with open(file_path, 'r') as file:
+                script = json.load(file)
             
             self.current_script = script
             self.current_script_path = file_path
             logger.info(f"Loaded script from {file_path}")
             return script
         except Exception as e:
-            logger.error(f"Error loading script: {str(e)}")
+            logger.error(f"Failed to load script: {str(e)}")
             return None
     
     def save_script(self, file_path: Optional[str] = None) -> bool:
@@ -93,23 +97,23 @@ class ScriptManager:
         # Determine file path
         path = file_path if file_path else self.current_script_path
         if not path:
-            # Generate a file path if none exists
+            # Generate a file path based on script name
             script_name = self.current_script['name'].replace(' ', '_').lower()
             path = os.path.join(self.scripts_dir, f"{script_name}.json")
         
         try:
-            # Ensure directory exists
+            # Ensure the directory exists
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
             
             # Save the script
-            with open(path, 'w') as f:
-                json.dump(self.current_script, f, indent=2)
+            with open(path, 'w') as file:
+                json.dump(self.current_script, file, indent=2)
             
             self.current_script_path = path
             logger.info(f"Saved script to {path}")
             return True
         except Exception as e:
-            logger.error(f"Error saving script: {str(e)}")
+            logger.error(f"Failed to save script: {str(e)}")
             return False
     
     def add_step(self, step: Dict[str, Any], index: Optional[int] = None) -> bool:
@@ -128,17 +132,22 @@ class ScriptManager:
             return False
         
         try:
-            if index is None:
+            steps = self.current_script.get('steps', [])
+            
+            if index is None or index >= len(steps):
                 # Append to the end
-                self.current_script['steps'].append(step)
+                steps.append(step)
+                logger.info(f"Added step at the end: {step.get('type', 'Unknown')} - {step.get('action', '')}")
             else:
                 # Insert at specified position
-                self.current_script['steps'].insert(index, step)
+                steps.insert(index, step)
+                logger.info(f"Inserted step at position {index}: {step.get('type', 'Unknown')} - {step.get('action', '')}")
             
-            logger.info(f"Added step: {step['type']} - {step.get('action', '')}")
+            self.current_script['steps'] = steps
+            self.current_script['modified'] = time.time()
             return True
         except Exception as e:
-            logger.error(f"Error adding step: {str(e)}")
+            logger.error(f"Failed to add step: {str(e)}")
             return False
     
     def remove_step(self, index: int) -> bool:
@@ -156,15 +165,21 @@ class ScriptManager:
             return False
         
         try:
-            if 0 <= index < len(self.current_script['steps']):
-                removed = self.current_script['steps'].pop(index)
-                logger.info(f"Removed step at index {index}: {removed['type']} - {removed.get('action', '')}")
+            steps = self.current_script.get('steps', [])
+            
+            if 0 <= index < len(steps):
+                # Remove the step at the specified index
+                removed_step = steps.pop(index)
+                logger.info(f"Removed step at position {index}: {removed_step.get('type', 'Unknown')} - {removed_step.get('action', '')}")
+                
+                self.current_script['steps'] = steps
+                self.current_script['modified'] = time.time()
                 return True
             else:
                 logger.error(f"Invalid step index: {index}")
                 return False
         except Exception as e:
-            logger.error(f"Error removing step: {str(e)}")
+            logger.error(f"Failed to remove step: {str(e)}")
             return False
     
     def update_step(self, index: int, step: Dict[str, Any]) -> bool:
@@ -183,15 +198,22 @@ class ScriptManager:
             return False
         
         try:
-            if 0 <= index < len(self.current_script['steps']):
-                self.current_script['steps'][index] = step
-                logger.info(f"Updated step at index {index}: {step['type']} - {step.get('action', '')}")
+            steps = self.current_script.get('steps', [])
+            
+            if 0 <= index < len(steps):
+                # Update the step at the specified index
+                old_step = steps[index]
+                steps[index] = step
+                logger.info(f"Updated step at position {index}: {old_step.get('type', 'Unknown')} -> {step.get('type', 'Unknown')}")
+                
+                self.current_script['steps'] = steps
+                self.current_script['modified'] = time.time()
                 return True
             else:
                 logger.error(f"Invalid step index: {index}")
                 return False
         except Exception as e:
-            logger.error(f"Error updating step: {str(e)}")
+            logger.error(f"Failed to update step: {str(e)}")
             return False
     
     def move_step(self, from_index: int, to_index: int) -> bool:
@@ -209,26 +231,23 @@ class ScriptManager:
             logger.error("No script loaded")
             return False
         
-        steps = self.current_script['steps']
-        
         try:
+            steps = self.current_script.get('steps', [])
+            
             if 0 <= from_index < len(steps) and 0 <= to_index < len(steps):
-                # Store the step to move
-                step = steps[from_index]
-                
-                # Remove from original position
-                steps.pop(from_index)
-                
-                # Insert at new position
+                # Move the step
+                step = steps.pop(from_index)
                 steps.insert(to_index, step)
+                logger.info(f"Moved step from position {from_index} to {to_index}")
                 
-                logger.info(f"Moved step from index {from_index} to {to_index}")
+                self.current_script['steps'] = steps
+                self.current_script['modified'] = time.time()
                 return True
             else:
-                logger.error(f"Invalid indices: from={from_index}, to={to_index}")
+                logger.error(f"Invalid step indices: from={from_index}, to={to_index}")
                 return False
         except Exception as e:
-            logger.error(f"Error moving step: {str(e)}")
+            logger.error(f"Failed to move step: {str(e)}")
             return False
     
     def get_scripts_list(self) -> List[str]:
@@ -240,6 +259,7 @@ class ScriptManager:
         """
         try:
             if not os.path.exists(self.scripts_dir):
+                logger.warning(f"Scripts directory does not exist: {self.scripts_dir}")
                 return []
             
             scripts = []
@@ -247,9 +267,10 @@ class ScriptManager:
                 if file.endswith('.json'):
                     scripts.append(os.path.join(self.scripts_dir, file))
             
+            logger.info(f"Found {len(scripts)} script files")
             return scripts
         except Exception as e:
-            logger.error(f"Error listing scripts: {str(e)}")
+            logger.error(f"Failed to list scripts: {str(e)}")
             return []
     
     def get_script_info(self, file_path: str) -> Optional[Dict[str, Any]]:
@@ -263,19 +284,22 @@ class ScriptManager:
             dict: Basic script info, or None if error
         """
         try:
-            with open(file_path, 'r') as f:
-                script = json.load(f)
+            with open(file_path, 'r') as file:
+                script = json.load(file)
             
-            # Return only basic info
-            return {
-                "name": script.get("name", "Unknown"),
-                "description": script.get("description", ""),
-                "created": script.get("created", 0),
-                "modified": script.get("modified", 0),
-                "steps_count": len(script.get("steps", []))
+            # Extract basic info
+            info = {
+                'name': script.get('name', 'Unnamed'),
+                'description': script.get('description', ''),
+                'created': script.get('created', 0),
+                'modified': script.get('modified', 0),
+                'steps_count': len(script.get('steps', [])),
+                'path': file_path
             }
+            
+            return info
         except Exception as e:
-            logger.error(f"Error getting script info: {str(e)}")
+            logger.error(f"Failed to get script info: {str(e)}")
             return None
     
     def validate_script(self, script: Optional[Dict[str, Any]] = None) -> List[str]:
@@ -288,50 +312,52 @@ class ScriptManager:
         Returns:
             list: List of validation error messages, empty if valid
         """
+        errors = []
         script_to_validate = script if script is not None else self.current_script
         
         if not script_to_validate:
-            return ["No script to validate"]
+            errors.append("No script to validate")
+            return errors
         
-        errors = []
+        # Check for required fields
+        if 'name' not in script_to_validate:
+            errors.append("Missing script name")
         
-        # Check required fields
-        if "name" not in script_to_validate or not script_to_validate["name"]:
-            errors.append("Script name is required")
+        if 'steps' not in script_to_validate:
+            errors.append("Missing steps array")
+        elif not isinstance(script_to_validate['steps'], list):
+            errors.append("Steps should be an array")
         
-        if "steps" not in script_to_validate:
-            errors.append("Steps array is required")
-        elif not isinstance(script_to_validate["steps"], list):
-            errors.append("Steps must be an array")
-        
-        # Validate individual steps
-        for i, step in enumerate(script_to_validate.get("steps", [])):
+        # Validate each step
+        for i, step in enumerate(script_to_validate.get('steps', [])):
             if not isinstance(step, dict):
-                errors.append(f"Step {i} must be an object")
+                errors.append(f"Step {i+1} is not a dictionary")
                 continue
             
-            if "type" not in step:
-                errors.append(f"Step {i} missing 'type' field")
+            # Check for required step fields
+            if 'type' not in step:
+                errors.append(f"Step {i+1} is missing 'type' field")
             
-            # Different validations based on step type
-            step_type = step.get("type", "").lower()
+            # Validate step based on type
+            step_type = step.get('type', '').lower()
             
-            if step_type == "desktop":
-                if "action" not in step:
-                    errors.append(f"Desktop step {i} missing 'action' field")
+            if step_type == 'desktop':
+                if 'action' not in step:
+                    errors.append(f"Desktop step {i+1} is missing 'action' field")
             
-            elif step_type == "web":
-                if "action" not in step:
-                    errors.append(f"Web step {i} missing 'action' field")
-                
-                # Check for required fields based on action
-                action = step.get("action", "").lower()
-                if action in ["click", "type", "wait"]:
-                    if "selector" not in step:
-                        errors.append(f"Web step {i} ({action}) missing 'selector' field")
+            elif step_type == 'web':
+                if 'action' not in step:
+                    errors.append(f"Web step {i+1} is missing 'action' field")
             
-            elif step_type == "captcha":
-                if "captcha_type" not in step:
-                    errors.append(f"CAPTCHA step {i} missing 'captcha_type' field")
-        
+            elif step_type == 'captcha':
+                if 'captcha_type' not in step:
+                    errors.append(f"CAPTCHA step {i+1} is missing 'captcha_type' field")
+            
+            elif step_type == 'wait':
+                if 'duration' not in step:
+                    errors.append(f"Wait step {i+1} is missing 'duration' field")
+            
+            elif step_type == '':
+                errors.append(f"Step {i+1} has empty type")
+            
         return errors

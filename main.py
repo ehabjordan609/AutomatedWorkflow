@@ -6,29 +6,32 @@ import sys
 import os
 import logging
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt
 
-from gui.main_window import MainWindow
 from utils.logger import setup_logger
+from gui.main_window import MainWindow
 
 def main():
     """Main function to start the application."""
     # Set up logging
     setup_logger()
     logger = logging.getLogger(__name__)
-    logger.info("Starting Automation Tool application")
-
-    # Create Qt application
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    
+    # Check if the scripts directory exists
+    if not os.path.exists("scripts"):
+        os.makedirs("scripts")
+        logger.info("Created scripts directory")
+    
+    # Create QApplication instance
     app = QApplication(sys.argv)
     app.setApplicationName("Automation Tool")
-    app.setOrganizationName("AutoTool")
+    app.setApplicationVersion("1.0.0")
     
-    # Create and show main window
+    # Create and show the main window
     window = MainWindow()
     window.show()
     
-    # Start application event loop
+    # Start the event loop
+    logger.info("Application started")
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
