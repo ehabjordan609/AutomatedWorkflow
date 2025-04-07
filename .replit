@@ -35,7 +35,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pip install PyQt5 pyautogui pynput selenium opencv-python pytesseract numpy Pillow && python main.py"
+args = "python main.py"
 waitForPort = 5000
 
 [[workflows.workflow]]
@@ -67,4 +67,4 @@ task = "shell.exec"
 args = "python simple_app.py"
 
 [deployment]
-run = ["sh", "-c", "pip install PyQt5 pyautogui pynput selenium opencv-python pytesseract numpy Pillow && python main.py"]
+run = ["sh", "-c", "python main.py"]

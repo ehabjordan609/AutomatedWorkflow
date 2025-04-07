@@ -22,6 +22,345 @@ from script_manager import ScriptManager
 
 logger = logging.getLogger(__name__)
 
+class StepEditor(QWidget):
+    """Base class for step editors."""
+    
+    # Signal emitted when the step is modified
+    step_changed = pyqtSignal(dict)
+    
+    def __init__(self):
+        """Initialize the step editor."""
+        super().__init__()
+        self.current_step = {}
+        
+    def set_step(self, step: Dict[str, Any]):
+        """Set the step data to edit."""
+        self.current_step = step.copy()
+        self._update_ui()
+        
+    def _update_ui(self):
+        """Update the UI with the current step data."""
+        pass
+        
+    def _emit_step_changed(self):
+        """Emit the step_changed signal with the current step data."""
+        self.step_changed.emit(self.current_step)
+
+
+class DesktopStepEditor(StepEditor):
+    """Editor for desktop automation steps."""
+    
+    def __init__(self):
+        """Initialize the desktop step editor."""
+        super().__init__()
+        layout = QFormLayout()
+        self.setLayout(layout)
+        
+        # Action type selector
+        self.action_combo = QComboBox()
+        self.action_combo.addItems([
+            "click", "right_click", "double_click", "type", "key_press", 
+            "move", "drag", "scroll", "find_image", "wait_for_image", 
+            "screenshot", "select_all", "copy", "paste", "cut", 
+            "new_tab", "close_tab", "switch_tab", "read_from_file", 
+            "write_to_file", "append_to_file", "wait_for_clipboard"
+        ])
+        self.action_combo.currentTextChanged.connect(self._on_action_changed)
+        layout.addRow("Action:", self.action_combo)
+        
+        # Common parameters (will customize based on action)
+        self.params_widget = QWidget()
+        self.params_layout = QFormLayout()
+        self.params_widget.setLayout(self.params_layout)
+        layout.addRow(self.params_widget)
+        
+    def _update_ui(self):
+        """Update the UI with the current step data."""
+        action = self.current_step.get("action", "click")
+        self.action_combo.setCurrentText(action)
+        self._update_params_ui()
+        
+    def _on_action_changed(self, action):
+        """Handle action type changes."""
+        self.current_step["action"] = action
+        self._update_params_ui()
+        self._emit_step_changed()
+        
+    def _update_params_ui(self):
+        """Update the parameters UI based on the current action."""
+        # Clear existing params UI
+        while self.params_layout.rowCount() > 0:
+            self.params_layout.removeRow(0)
+            
+        # Add parameters based on action type
+        action = self.current_step.get("action", "click")
+        
+        # Add specific parameters based on action type
+        # This is simplified - in a real implementation, 
+        # you'd add the appropriate widgets for each parameter
+        if action in ["click", "right_click", "double_click", "move"]:
+            # Add coordinate inputs
+            self._add_coordinate_inputs()
+            
+    def _add_coordinate_inputs(self):
+        """Add coordinate input fields."""
+        # X coordinate
+        x_spin = QSpinBox()
+        x_spin.setRange(0, 9999)
+        x_spin.setValue(self.current_step.get("x", 0))
+        x_spin.valueChanged.connect(lambda v: self._update_param("x", v))
+        self.params_layout.addRow("X:", x_spin)
+        
+        # Y coordinate
+        y_spin = QSpinBox()
+        y_spin.setRange(0, 9999)
+        y_spin.setValue(self.current_step.get("y", 0))
+        y_spin.valueChanged.connect(lambda v: self._update_param("y", v))
+        self.params_layout.addRow("Y:", y_spin)
+        
+    def _update_param(self, param, value):
+        """Update a parameter value."""
+        self.current_step[param] = value
+        self._emit_step_changed()
+
+
+class WebStepEditor(StepEditor):
+    """Editor for web automation steps."""
+    
+    def __init__(self):
+        """Initialize the web step editor."""
+        super().__init__()
+        layout = QFormLayout()
+        self.setLayout(layout)
+        
+        # Action type selector
+        self.action_combo = QComboBox()
+        self.action_combo.addItems([
+            "start_browser", "start_browser_with_profile", "close_browser", 
+            "navigate", "click", "type", "clear", "submit", "select", 
+            "wait", "extract", "scroll", "switch_frame", "switch_window", 
+            "execute_script", "take_screenshot"
+        ])
+        self.action_combo.currentTextChanged.connect(self._on_action_changed)
+        layout.addRow("Action:", self.action_combo)
+        
+        # Common parameters
+        self.params_widget = QWidget()
+        self.params_layout = QFormLayout()
+        self.params_widget.setLayout(self.params_layout)
+        layout.addRow(self.params_widget)
+        
+    def _update_ui(self):
+        """Update the UI with the current step data."""
+        action = self.current_step.get("action", "navigate")
+        self.action_combo.setCurrentText(action)
+        self._update_params_ui()
+        
+    def _on_action_changed(self, action):
+        """Handle action type changes."""
+        self.current_step["action"] = action
+        self._update_params_ui()
+        self._emit_step_changed()
+        
+    def _update_params_ui(self):
+        """Update the parameters UI based on the current action."""
+        # Implementation would be similar to DesktopStepEditor
+        pass
+
+
+class CaptchaStepEditor(StepEditor):
+    """Editor for CAPTCHA handling steps."""
+    
+    def __init__(self):
+        """Initialize the CAPTCHA step editor."""
+        super().__init__()
+        layout = QFormLayout()
+        self.setLayout(layout)
+        
+        # CAPTCHA type selector
+        self.type_combo = QComboBox()
+        self.type_combo.addItems([
+            "image", "recaptcha", "audio", "text", "manual"
+        ])
+        self.type_combo.currentTextChanged.connect(self._on_type_changed)
+        layout.addRow("CAPTCHA Type:", self.type_combo)
+        
+        # Parameters
+        self.params_widget = QWidget()
+        self.params_layout = QFormLayout()
+        self.params_widget.setLayout(self.params_layout)
+        layout.addRow(self.params_widget)
+        
+    def _update_ui(self):
+        """Update the UI with the current step data."""
+        captcha_type = self.current_step.get("captcha_type", "image")
+        self.type_combo.setCurrentText(captcha_type)
+        self._update_params_ui()
+        
+    def _on_type_changed(self, captcha_type):
+        """Handle CAPTCHA type changes."""
+        self.current_step["captcha_type"] = captcha_type
+        self._update_params_ui()
+        self._emit_step_changed()
+        
+    def _update_params_ui(self):
+        """Update the parameters UI based on the current CAPTCHA type."""
+        # Implementation similar to other editors
+        pass
+
+
+class WaitStepEditor(StepEditor):
+    """Editor for wait/delay steps."""
+    
+    def __init__(self):
+        """Initialize the wait step editor."""
+        super().__init__()
+        layout = QFormLayout()
+        self.setLayout(layout)
+        
+        # Wait type selector
+        self.type_combo = QComboBox()
+        self.type_combo.addItems([
+            "fixed", "random", "until_image", "until_element"
+        ])
+        self.type_combo.currentTextChanged.connect(self._on_type_changed)
+        layout.addRow("Wait Type:", self.type_combo)
+        
+        # Duration
+        self.duration_spin = QDoubleSpinBox()
+        self.duration_spin.setRange(0.1, 3600)
+        self.duration_spin.setValue(1.0)
+        self.duration_spin.valueChanged.connect(self._on_duration_changed)
+        layout.addRow("Duration (s):", self.duration_spin)
+        
+    def _update_ui(self):
+        """Update the UI with the current step data."""
+        wait_type = self.current_step.get("wait_type", "fixed")
+        self.type_combo.setCurrentText(wait_type)
+        
+        duration = self.current_step.get("duration", 1.0)
+        self.duration_spin.setValue(duration)
+        
+    def _on_type_changed(self, wait_type):
+        """Handle wait type changes."""
+        self.current_step["wait_type"] = wait_type
+        self._emit_step_changed()
+        
+    def _on_duration_changed(self, duration):
+        """Handle duration changes."""
+        self.current_step["duration"] = duration
+        self._emit_step_changed()
+
+
+class VariableStepEditor(StepEditor):
+    """Editor for variable manipulation steps."""
+    
+    def __init__(self):
+        """Initialize the variable step editor."""
+        super().__init__()
+        layout = QFormLayout()
+        self.setLayout(layout)
+        
+        # Variable operation selector
+        self.operation_combo = QComboBox()
+        self.operation_combo.addItems([
+            "set", "increment", "decrement", "append", "clear"
+        ])
+        self.operation_combo.currentTextChanged.connect(self._on_operation_changed)
+        layout.addRow("Operation:", self.operation_combo)
+        
+        # Variable name
+        self.name_edit = QLineEdit()
+        self.name_edit.textChanged.connect(self._on_name_changed)
+        layout.addRow("Variable Name:", self.name_edit)
+        
+        # Value
+        self.value_edit = QLineEdit()
+        self.value_edit.textChanged.connect(self._on_value_changed)
+        layout.addRow("Value:", self.value_edit)
+        
+    def _update_ui(self):
+        """Update the UI with the current step data."""
+        operation = self.current_step.get("operation", "set")
+        self.operation_combo.setCurrentText(operation)
+        
+        name = self.current_step.get("name", "")
+        self.name_edit.setText(name)
+        
+        value = self.current_step.get("value", "")
+        self.value_edit.setText(str(value))
+        
+    def _on_operation_changed(self, operation):
+        """Handle operation changes."""
+        self.current_step["operation"] = operation
+        self._emit_step_changed()
+        
+    def _on_name_changed(self, name):
+        """Handle variable name changes."""
+        self.current_step["name"] = name
+        self._emit_step_changed()
+        
+    def _on_value_changed(self, value):
+        """Handle value changes."""
+        self.current_step["value"] = value
+        self._emit_step_changed()
+
+
+class ConditionStepEditor(StepEditor):
+    """Editor for conditional logic steps."""
+    
+    def __init__(self):
+        """Initialize the condition step editor."""
+        super().__init__()
+        layout = QFormLayout()
+        self.setLayout(layout)
+        
+        # Condition type selector
+        self.type_combo = QComboBox()
+        self.type_combo.addItems([
+            "if_equal", "if_not_equal", "if_greater", "if_less", 
+            "if_contains", "if_exists", "if_image_found"
+        ])
+        self.type_combo.currentTextChanged.connect(self._on_type_changed)
+        layout.addRow("Condition Type:", self.type_combo)
+        
+        # Left value
+        self.left_edit = QLineEdit()
+        self.left_edit.textChanged.connect(self._on_left_changed)
+        layout.addRow("Left Value:", self.left_edit)
+        
+        # Right value
+        self.right_edit = QLineEdit()
+        self.right_edit.textChanged.connect(self._on_right_changed)
+        layout.addRow("Right Value:", self.right_edit)
+        
+    def _update_ui(self):
+        """Update the UI with the current step data."""
+        condition_type = self.current_step.get("condition_type", "if_equal")
+        self.type_combo.setCurrentText(condition_type)
+        
+        left = self.current_step.get("left", "")
+        self.left_edit.setText(str(left))
+        
+        right = self.current_step.get("right", "")
+        self.right_edit.setText(str(right))
+        
+    def _on_type_changed(self, condition_type):
+        """Handle condition type changes."""
+        self.current_step["condition_type"] = condition_type
+        self._emit_step_changed()
+        
+    def _on_left_changed(self, left):
+        """Handle left value changes."""
+        self.current_step["left"] = left
+        self._emit_step_changed()
+        
+    def _on_right_changed(self, right):
+        """Handle right value changes."""
+        self.current_step["right"] = right
+        self._emit_step_changed()
+
+
 class ScriptEditorWidget(QWidget):
     """Widget for editing automation scripts."""
     
