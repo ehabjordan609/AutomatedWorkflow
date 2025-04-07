@@ -1,53 +1,43 @@
 {
   "name": "Desktop Actions Example",
-  "description": "Demonstrates various desktop actions",
-  "created": 1713567423.5959985,
-  "modified": 1713567423.5959985,
+  "description": "Example script showing basic desktop automation actions",
+  "created": 1680813600,
+  "modified": 1680813600,
   "steps": [
     {
       "type": "desktop",
-      "action": "move",
-      "x": 500,
-      "y": 300,
-      "duration": 0.5,
-      "delay": 0.5,
-      "description": "Move cursor to center"
+      "action": "click",
+      "x": 100,
+      "y": 100,
+      "description": "Click at position (100, 100)",
+      "delay": 1.0
     },
     {
       "type": "desktop",
-      "action": "click",
-      "x": 500,
-      "y": 300,
-      "delay": 0.5,
-      "description": "Click at center"
+      "action": "key_press",
+      "key": "ctrl+a",
+      "description": "Select all text (Ctrl+A)",
+      "delay": 0.5
     },
     {
-      "type": "desktop", 
+      "type": "desktop",
       "action": "type",
       "text": "Hello, Automation Tool!",
-      "interval": 0.05,
-      "delay": 0.5,
-      "description": "Type text"
+      "description": "Type sample text",
+      "delay": 0.5
+    },
+    {
+      "type": "wait",
+      "duration": 2,
+      "description": "Wait for 2 seconds",
+      "delay": 0.0
     },
     {
       "type": "desktop",
       "action": "key_press",
       "key": "enter",
-      "delay": 0.5,
-      "description": "Press Enter key"
-    },
-    {
-      "type": "wait",
-      "duration": 2,
-      "delay": 0.5,
-      "description": "Wait for 2 seconds"
-    },
-    {
-      "type": "desktop",
-      "action": "scroll",
-      "clicks": -5,
-      "delay": 0.5,
-      "description": "Scroll down"
+      "description": "Press Enter key",
+      "delay": 0.5
     }
   ]
 }

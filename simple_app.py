@@ -255,6 +255,10 @@ def create_new_script(script_manager):
     name = input("Enter a name for the new script: ")
     script_manager.create_new_script(name)
     print(f"Created new script: {name}")
+    print("\nNext steps:")
+    print("1. Add steps to your script using option 4 from the main menu")
+    print("2. Save your script using option 5")
+    print("3. Simulate execution with option 6 to preview how it will run")
 
 def load_script(script_manager):
     """Load an existing script."""
@@ -274,7 +278,16 @@ def load_script(script_manager):
         if choice == 0:
             return
         if 1 <= choice <= len(scripts):
-            script_manager.load_script(scripts[choice-1])
+            script_path = scripts[choice-1]
+            script = script_manager.load_script(script_path)
+            if script:
+                print(f"Loaded script: {os.path.basename(script_path)}")
+                print("\nNext steps:")
+                print("1. View the script using option 3 from the main menu")
+                print("2. Add more steps using option 4")
+                print("3. Simulate execution with option 6 to preview how it will run")
+            else:
+                print(f"Failed to load script: {script_path}")
         else:
             print("Invalid selection!")
     except ValueError:
@@ -530,7 +543,12 @@ def save_script(script_manager):
         success = script_manager.save_script()
     
     if success:
-        print("Script saved successfully!")
+        saved_path = script_manager.current_script_path if hasattr(script_manager, 'current_script_path') else "unknown path"
+        print(f"Script saved successfully to: {saved_path}")
+        print("\nNext steps:")
+        print("1. You can simulate execution with option 6 to preview how it will run")
+        print("2. To run with real automation, use the main.py file:")
+        print("   $ python main.py --script", os.path.basename(saved_path))
     else:
         print("Failed to save script!")
 
@@ -544,8 +562,19 @@ def simulate_script(script_manager):
     engine.current_script = script_manager.current_script
     
     print("\nSimulating script execution...")
+    print("\n=== SIMULATION START ===")
     engine.execute_script(simulate=True)
-    print("Simulation completed!")
+    print("=== SIMULATION END ===")
+    print("\nSimulation completed!")
+    
+    # Provide guidance on running with real automation
+    print("\nTo run this script with real automation:")
+    print("1. Save your script using option 5 from the main menu")
+    print("2. The script will be saved in the 'scripts' folder")
+    print("3. To run the script with real automation, use the main.py file:")
+    print("   $ python main.py --script <script_filename>")
+    print("   Example: python main.py --script my_script.json")
+    print("\nNote: Running with real automation requires all dependencies to be installed.")
 
 def main():
     """Main entry point for the simple Automation Tool application."""

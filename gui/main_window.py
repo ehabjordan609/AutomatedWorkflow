@@ -184,14 +184,23 @@ class MainWindow(QMainWindow):
         if tab_index == 0:  # Script Editor
             pass  # No specific toolbar actions for Script Editor yet
         elif tab_index == 1:  # Recorder
-            self.main_toolbar.addAction(self.recorder.start_action)
-            self.main_toolbar.addAction(self.recorder.stop_action)
-            self.main_toolbar.addAction(self.recorder.save_action)
+            # Check if actions exist before adding them
+            if hasattr(self.recorder, 'start_action'):
+                self.main_toolbar.addAction(self.recorder.start_action)
+            if hasattr(self.recorder, 'stop_action'):
+                self.main_toolbar.addAction(self.recorder.stop_action)
+            if hasattr(self.recorder, 'save_action'):
+                self.main_toolbar.addAction(self.recorder.save_action)
         elif tab_index == 2:  # Player
-            self.main_toolbar.addAction(self.player.run_action)
-            self.main_toolbar.addAction(self.player.pause_action)
-            self.main_toolbar.addAction(self.player.stop_action)
-            self.main_toolbar.addAction(self.player.step_action)
+            # Check if actions exist before adding them
+            if hasattr(self.player, 'run_action'):
+                self.main_toolbar.addAction(self.player.run_action)
+            if hasattr(self.player, 'pause_action'):
+                self.main_toolbar.addAction(self.player.pause_action)
+            if hasattr(self.player, 'stop_action'):
+                self.main_toolbar.addAction(self.player.stop_action)
+            if hasattr(self.player, 'step_action'):
+                self.main_toolbar.addAction(self.player.step_action)
     
     def _create_status_bar(self):
         """Create the status bar for the application."""
