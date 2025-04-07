@@ -370,7 +370,7 @@ class DesktopAutomation:
                 # Take a screenshot
                 screen = pyautogui.screenshot()
                 screen_np = np.array(screen)
-                screen_gray = cv2.cvtColor(screen_np, cv2.COLOR_RGB2BGR)
+                screen_bgr = cv2.cvtColor(screen_np, cv2.COLOR_RGB2BGR)
                 
                 # Load the template image
                 template = cv2.imread(image_path)
@@ -378,34 +378,246 @@ class DesktopAutomation:
                     logger.error(f"Failed to load image: {image_path}")
                     return None
                 
-                # Perform template matching
-                result = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
-                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                # Get template dimensions
+                template_h, template_w = template.shape[:2]
                 
-                # If the match is good enough
-                if max_val >= confidence:
-                    # Get the center of the matched region
-                    template_h, template_w = template.shape[:2]
-                    center_x = max_loc[0] + template_w // 2
-                    center_y = max_loc[1] + template_h // 2
+                # Try different preprocessing techniques
+                methods = [
+                    # Try original images first
+                    (screen_bgr, template, "Original"),
                     
-                    logger.info(f"Image found at: ({center_x}, {center_y}) with confidence {max_val:.2f}")
+                    # Try grayscale for simpler matching
+                    (cv2.cvtColor(screen_bgr, cv2.COLOR_BGR2GRAY), 
+                     cv2.cvtColor(template, cv2.COLOR_BGR2GRAY), "Grayscale"),
+                    
+                    # Try edge detection for shape-based matching
+                    (cv2.Canny(cv2.cvtColor(screen_bgr, cv2.COLOR_BGR2GRAY), 50, 200), 
+                     cv2.Canny(cv2.cvtColor(template, cv2.COLOR_BGR2GRAY), 50, 200), "Edge")
+                ]
+                
+                # Try different template matching methods
+                matching_methods = [
+                    (cv2.TM_CCOEFF_NORMED, "Correlation Coefficient"),
+                    (cv2.TM_CCORR_NORMED, "Cross Correlation"),
+                    (cv2.TM_SQDIFF_NORMED, "Square Difference")
+                ]
+                
+                best_match_val = -1
+                best_match_loc = None
+                best_match_method = None
+                
+                for screen_img, templ_img, preprocess_name in methods:
+                    for method, method_name in matching_methods:
+                        try:
+                            # Perform template matching
+                            result = cv2.matchTemplate(screen_img, templ_img, method)
+                            
+                            # Handle method-specific min/max logic
+                            if method == cv2.TM_SQDIFF_NORMED:
+                                # For SQDIFF, smaller values are better
+                                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                                curr_loc = min_loc
+                                # Convert to confidence value (1 - distance)
+                                match_val = 1.0 - min_val
+                            else:
+                                # For other methods, larger values are better
+                                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                                curr_loc = max_loc
+                                match_val = max_val
+                            
+                            logger.debug(f"Method: {method_name}, Preprocess: {preprocess_name}, Match: {match_val:.4f}")
+                            
+                            # Track best match across all methods
+                            if match_val > best_match_val:
+                                best_match_val = match_val
+                                best_match_loc = curr_loc
+                                best_match_method = f"{preprocess_name} with {method_name}"
+                                
+                        except Exception as e:
+                            logger.debug(f"Error with {method_name} on {preprocess_name}: {str(e)}")
+                
+                # If we found a reasonable match
+                if best_match_val >= confidence:
+                    # Get the center of the matched region
+                    center_x = best_match_loc[0] + template_w // 2
+                    center_y = best_match_loc[1] + template_h // 2
+                    
+                    logger.info(f"Image found at: ({center_x}, {center_y}) with confidence {best_match_val:.2f}")
+                    logger.info(f"Best matching method: {best_match_method}")
                     return (center_x, center_y)
-                else:
-                    logger.info(f"Image not found (best match: {max_val:.2f})")
-                    return None
+                
+                # If we have a possible match but below confidence
+                elif best_match_val > 0.5:  # A reasonable lower threshold to report "near matches"
+                    logger.info(f"Possible match found but below threshold: {best_match_val:.2f} < {confidence}")
+                    logger.info(f"Best matching method: {best_match_method}")
+                
+                # Try a multi-scale approach as a last resort
+                logger.info("Attempting multi-scale template matching...")
+                
+                # Convert to grayscale for multi-scale search
+                gray_screen = cv2.cvtColor(screen_bgr, cv2.COLOR_BGR2GRAY)
+                gray_template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+                
+                # Define scale range
+                scales = [0.8, 0.9, 1.0, 1.1, 1.2]
+                best_scale_val = -1
+                best_scale_loc = None
+                
+                for scale in scales:
+                    # Resize the template
+                    width = int(template_w * scale)
+                    height = int(template_h * scale)
+                    if width <= 0 or height <= 0:
+                        continue
+                    
+                    resized_template = cv2.resize(gray_template, (width, height))
+                    
+                    # Perform template matching
+                    try:
+                        result = cv2.matchTemplate(gray_screen, resized_template, cv2.TM_CCOEFF_NORMED)
+                        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                        
+                        logger.debug(f"Scale: {scale}, Match: {max_val:.4f}")
+                        
+                        if max_val > best_scale_val:
+                            best_scale_val = max_val
+                            best_scale_loc = max_loc
+                            best_scale_method = f"Multi-scale at {scale}x"
+                    except Exception as e:
+                        logger.debug(f"Error with scale {scale}: {str(e)}")
+                
+                # If multi-scale improved the match
+                if best_scale_val >= confidence:
+                    # Get the center of the matched region
+                    center_x = best_scale_loc[0] + template_w // 2
+                    center_y = best_scale_loc[1] + template_h // 2
+                    
+                    logger.info(f"Image found with multi-scale at: ({center_x}, {center_y}) with confidence {best_scale_val:.2f}")
+                    logger.info(f"Best matching method: {best_scale_method}")
+                    return (center_x, center_y)
+                
+                # Try color/contrast adjustments if still no match
+                logger.info("Attempting color and contrast adjustments...")
+                
+                # Try different brightness and contrast settings
+                alpha_values = [0.8, 1.0, 1.2]  # Contrast
+                beta_values = [-20, 0, 20]      # Brightness
+                
+                best_adjust_val = -1
+                best_adjust_loc = None
+                
+                for alpha in alpha_values:
+                    for beta in beta_values:
+                        try:
+                            # Adjust the screenshot
+                            adjusted = cv2.convertScaleAbs(gray_screen, alpha=alpha, beta=beta)
+                            
+                            # Match with the template
+                            result = cv2.matchTemplate(adjusted, gray_template, cv2.TM_CCOEFF_NORMED)
+                            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                            
+                            logger.debug(f"Alpha: {alpha}, Beta: {beta}, Match: {max_val:.4f}")
+                            
+                            if max_val > best_adjust_val:
+                                best_adjust_val = max_val
+                                best_adjust_loc = max_loc
+                                best_adjust_method = f"Contrast/Brightness (α={alpha}, β={beta})"
+                        except Exception as e:
+                            logger.debug(f"Error with alpha={alpha}, beta={beta}: {str(e)}")
+                
+                # If adjustments improved the match
+                if best_adjust_val >= confidence:
+                    # Get the center of the matched region
+                    center_x = best_adjust_loc[0] + template_w // 2
+                    center_y = best_adjust_loc[1] + template_h // 2
+                    
+                    logger.info(f"Image found with adjustments at: ({center_x}, {center_y}) with confidence {best_adjust_val:.2f}")
+                    logger.info(f"Best matching method: {best_adjust_method}")
+                    return (center_x, center_y)
+                
+                # Get the best match among all techniques
+                best_overall_val = max(best_match_val, 
+                                      best_scale_val if 'best_scale_val' in locals() else -1,
+                                      best_adjust_val if 'best_adjust_val' in locals() else -1)
+                                  
+                # Return the best match even if below threshold, if requested
+                if params and 'return_best' in params and params.get('return_best', False) and best_overall_val > 0.4:
+                    # Determine which technique had the best result
+                    best_loc = None
+                    best_method = "Unknown"
+                    
+                    if best_overall_val == best_match_val and best_match_loc is not None:
+                        best_loc = best_match_loc
+                        best_method = best_match_method
+                    elif 'best_scale_val' in locals() and best_overall_val == best_scale_val and 'best_scale_loc' in locals() and best_scale_loc is not None:
+                        best_loc = best_scale_loc
+                        best_method = best_scale_method if 'best_scale_method' in locals() else "Multi-scale matching"
+                    elif 'best_adjust_val' in locals() and best_overall_val == best_adjust_val and 'best_adjust_loc' in locals() and best_adjust_loc is not None:
+                        best_loc = best_adjust_loc
+                        best_method = best_adjust_method if 'best_adjust_method' in locals() else "Brightness/contrast adjustment"
+                        
+                    # If for some reason we still don't have a valid location, skip this block
+                    if best_loc is None:
+                        logger.error("Failed to determine best match location")
+                        return None
+                        
+                    # Get the center of the matched region
+                    center_x = best_loc[0] + template_w // 2
+                    center_y = best_loc[1] + template_h // 2
+                    
+                    logger.info(f"Best possible match: ({center_x}, {center_y}) with confidence {best_overall_val:.2f}")
+                    logger.info(f"Below threshold but returned as requested. Method: {best_method}")
+                    return (center_x, center_y)
+                
+                # Still no good match
+                logger.info(f"Image not found after all attempts (best match: {best_overall_val:.2f})")
+                return None
                     
             except ImportError:
                 # Fall back to pyautogui's locateCenterOnScreen if OpenCV is not available
                 logger.info("OpenCV not available, falling back to PyAutoGUI")
-                location = pyautogui.locateCenterOnScreen(image_path, grayscale=True, confidence=float(confidence))
                 
-                if location:
-                    logger.info(f"Image found at: {location}")
-                    return location
-                else:
-                    logger.info(f"Image not found: {image_path}")
-                    return None
+                # Try with different confidence levels if needed
+                confidence_levels = [confidence, confidence - 0.1, confidence - 0.2]
+                for conf in confidence_levels:
+                    if conf < 0.5:  # Don't go too low to avoid false positives
+                        break
+                    
+                    logger.info(f"Trying PyAutoGUI with confidence: {conf}")
+                    try:
+                        # Try first with grayscale for speed (if pyautogui supports this parameter)
+                        try:
+                            location = pyautogui.locateCenterOnScreen(image_path, confidence=float(conf))
+                            if location:
+                                logger.info(f"Image found at: {location} (confidence: {conf})")
+                                return location
+                        except Exception as inner_e:
+                            logger.debug(f"Initial pyautogui locateCenterOnScreen error: {str(inner_e)}")
+                            pass
+                            
+                        # Additional fallback attempt - this should be minimal
+                        try:
+                            # Use a basic approach with just the confidence setting
+                            args = {'confidence': float(conf)}
+                            location = pyautogui.locateCenterOnScreen(image_path, **args)
+                            if location:
+                                logger.info(f"Image found at: {location} (basic, confidence: {conf})")
+                                return location
+                        except Exception as fallback_e:
+                            logger.debug(f"Fallback pyautogui call failed: {str(fallback_e)}")
+                            # Last resort - try without any special parameters if everything else fails
+                            try:
+                                location = pyautogui.locateCenterOnScreen(image_path)
+                                if location:
+                                    logger.info(f"Image found at: {location} (no params)")
+                                    return location
+                            except Exception:
+                                pass  # Already in an exception handler, just continue
+                    except Exception as e:
+                        logger.warning(f"PyAutoGUI error at confidence {conf}: {str(e)}")
+                
+                logger.info(f"Image not found using PyAutoGUI across all confidence levels")
+                return None
                 
         except Exception as e:
             logger.error(f"Image search error: {str(e)}")
