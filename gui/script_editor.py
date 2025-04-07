@@ -217,6 +217,16 @@ class CaptchaStepEditor(StepEditor):
         self.params_layout = QFormLayout()
         self.params_widget.setLayout(self.params_layout)
         layout.addRow(self.params_widget)
+    
+    def set_step_data(self, step: Dict[str, Any]) -> None:
+        """
+        Set the step data to be edited.
+        
+        Args:
+            step: The step data
+        """
+        self.current_step = step
+        self._update_ui()
         
     def _update_ui(self):
         """Update the UI with the current step data."""
@@ -259,6 +269,16 @@ class WaitStepEditor(StepEditor):
         self.duration_spin.setValue(1.0)
         self.duration_spin.valueChanged.connect(self._on_duration_changed)
         layout.addRow("Duration (s):", self.duration_spin)
+    
+    def set_step_data(self, step: Dict[str, Any]) -> None:
+        """
+        Set the step data to be edited.
+        
+        Args:
+            step: The step data
+        """
+        self.current_step = step
+        self._update_ui()
         
     def _update_ui(self):
         """Update the UI with the current step data."""
@@ -305,6 +325,16 @@ class VariableStepEditor(StepEditor):
         self.value_edit = QLineEdit()
         self.value_edit.textChanged.connect(self._on_value_changed)
         layout.addRow("Value:", self.value_edit)
+    
+    def set_step_data(self, step: Dict[str, Any]) -> None:
+        """
+        Set the step data to be edited.
+        
+        Args:
+            step: The step data
+        """
+        self.current_step = step
+        self._update_ui()
         
     def _update_ui(self):
         """Update the UI with the current step data."""
@@ -360,6 +390,16 @@ class ConditionStepEditor(StepEditor):
         self.right_edit = QLineEdit()
         self.right_edit.textChanged.connect(self._on_right_changed)
         layout.addRow("Right Value:", self.right_edit)
+        
+    def set_step_data(self, step: Dict[str, Any]) -> None:
+        """
+        Set the step data to be edited.
+        
+        Args:
+            step: The step data
+        """
+        self.current_step = step
+        self._update_ui()
         
     def _update_ui(self):
         """Update the UI with the current step data."""
