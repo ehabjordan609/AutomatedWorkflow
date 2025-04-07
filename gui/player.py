@@ -132,8 +132,15 @@ class PlayerWidget(QWidget):
     Widget for executing automation scripts.
     """
     
-    # Signal emitted when player status changes
+    # Signals emitted during execution
     status_changed = pyqtSignal(str)
+    execution_started = pyqtSignal()
+    execution_paused = pyqtSignal()
+    execution_resumed = pyqtSignal()
+    execution_stopped = pyqtSignal()
+    execution_completed = pyqtSignal(bool)
+    step_started = pyqtSignal(int, dict)
+    step_completed = pyqtSignal(int, bool)
     
     def __init__(self, script_manager: ScriptManager, automation_engine: AutomationEngine, parent=None):
         """Initialize the player widget."""

@@ -27,6 +27,10 @@ args = "Console UI"
 task = "workflow.run"
 args = "Console Application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Console App"
+
 [[workflows.workflow]]
 name = "Automation Tool"
 author = "agent"
@@ -72,6 +76,20 @@ args = "python simple_app.py"
 
 [[workflows.workflow]]
 name = "Console Application"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python simple_app.py"
+
+[[workflows.workflow]]
+name = "Console App"
 author = "agent"
 
 [workflows.workflow.metadata]

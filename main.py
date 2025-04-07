@@ -9,19 +9,27 @@ import os
 import logging
 
 # Set up fallback mechanism for GUI
+# Try to import GUI dependencies, but provide fallback if not available
+has_gui = False
 try:
     from PyQt5.QtWidgets import QApplication
     from utils.logger import setup_logger
     from gui.main_window import MainWindow
-    HAS_GUI = True
+    has_gui = True
 except ImportError:
-    HAS_GUI = False
-    import simple_app
+    # GUI not available, will use console mode
+    pass
 
 def main():
     """Main function to start the application."""
-    # Set up logging
-    if HAS_GUI:
+    # Basic logging setup if not using the utility
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+    )
+    
+    # Set up more advanced logging if GUI available
+    if has_gui:
         setup_logger()
     logger = logging.getLogger(__name__)
     
@@ -30,7 +38,7 @@ def main():
         os.makedirs("scripts")
         logger.info("Created scripts directory")
     
-    if HAS_GUI:
+    if has_gui:
         try:
             # Create QApplication instance
             app = QApplication(sys.argv)
@@ -47,10 +55,14 @@ def main():
         except Exception as e:
             logger.error(f"Error starting GUI: {e}")
             logger.info("Falling back to console application")
+            # Import the console app only when needed
+            import simple_app
             simple_app.main()
     else:
         # Run the console application if GUI is not available
         logger.info("GUI not available, running console application")
+        # Import the console app only when needed
+        import simple_app
         simple_app.main()
 
 if __name__ == "__main__":

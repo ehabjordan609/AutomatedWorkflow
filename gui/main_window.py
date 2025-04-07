@@ -208,8 +208,8 @@ class MainWindow(QMainWindow):
         
         # Player signals
         self.player.execution_started.connect(lambda: self.status_label.setText("Running script..."))
-        self.player.execution_completed.connect(lambda: self.status_label.setText("Script execution completed"))
-        self.player.execution_error.connect(lambda msg: self.status_label.setText(f"Error: {msg}"))
+        self.player.execution_completed.connect(lambda success: self.status_label.setText("Script execution completed" if success else "Script execution failed"))
+        self.player.status_changed.connect(lambda msg: self.status_label.setText(msg))
     
     def _load_settings(self):
         """Load application settings."""
