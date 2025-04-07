@@ -8,7 +8,8 @@ import time
 import logging
 from PyQt5.QtWidgets import (
     QMainWindow, QTabWidget, QAction, QFileDialog, QMessageBox, 
-    QApplication, QLabel, QStatusBar, QToolBar, QDockWidget
+    QApplication, QLabel, QStatusBar, QToolBar, QDockWidget,
+    QInputDialog
 )
 from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QIcon, QPixmap
